@@ -1,0 +1,9 @@
+# Packaging: hatchling copies the nearest .gitignore into the sdist, so this
+# one stands in for the monorepo root's.
+.venv/
+dist/
+build/
+__pycache__/
+*.egg-info/
+.env
+.env.*
