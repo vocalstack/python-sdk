@@ -867,6 +867,19 @@ class Rtmp(_Group):
         """The account's RTMP ingest: server URL (RTMPS where available), the stream key (in full only in the answer that made it, masked_stream_key after), whether an encoder is sending."""
         return _one(m.RtmpStatus, await self._t.json("GET", "/v1/rtmp"))
 
+    async def create_key(self, **fields: Any) -> m.CreatedAppStreamKey:
+        """A stream key of the app's own, beside the account's (``name``): ``stream_key`` is in full in this answer only. It works while the API key that made it does."""
+        body = _body(m.CreateAppStreamKey, fields)
+        return _one(m.CreatedAppStreamKey, await self._t.json("POST", "/v1/rtmp/keys", json_body=body))
+
+    async def list_keys(self) -> List[m.AppStreamKey]:
+        """The account's app stream keys, oldest first: masked, each with whether an encoder is sending on it (``live``, ``audio``)."""
+        return _many(m.AppStreamKey, await self._t.json("GET", "/v1/rtmp/keys"), "keys")
+
+    async def delete_key(self, id: str) -> None:
+        """Delete an app stream key: an encoder publishing on it is dropped within seconds."""
+        await self._t.json("DELETE", f"/v1/rtmp/keys/{_p(id)}")
+
 
 class Events(_Group):
     async def account(self) -> Any:

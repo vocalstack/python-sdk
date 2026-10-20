@@ -113,6 +113,17 @@ class ApiErrorBody(_Base):
     status: int
 
 
+class AppStreamKey(_Base):
+    """An app stream key as it is listed: never in full."""
+
+    audio: Optional[str] = None
+    created_at: str = Field(alias="createdAt")
+    id: str
+    live: bool
+    masked_stream_key: str = Field(alias="maskedStreamKey")
+    name: str
+
+
 class AudioCapabilities(_Base):
     channels: List[int]
     encodings: List[AudioEncoding]
@@ -247,6 +258,7 @@ class Limits2(_Base):
     requests_per_min: Optional[int] = Field(default=None, alias="requestsPerMin")
     retention_audio_days: Optional[int] = Field(default=None, alias="retentionAudioDays")
     retention_transcriptions_days: Optional[int] = Field(default=None, alias="retentionTranscriptionsDays")
+    retention_video_days: Optional[int] = Field(default=None, alias="retentionVideoDays")
     retention_voices_days: Optional[int] = Field(default=None, alias="retentionVoicesDays")
 
 
@@ -628,6 +640,12 @@ class CorrectionPage(_Base):
     next_cursor: Optional[str] = Field(default=None, alias="nextCursor")
 
 
+class CreateAppStreamKey(_Base):
+    """`POST /v1/rtmp/keys`."""
+
+    name: str
+
+
 class CreateAudioSource(_Base):
     """`POST /v1/broadcasts/{id}/audio-sources`."""
 
@@ -727,6 +745,17 @@ class CreateVoiceFromSpeaker(_Base):
     name: str
     recording_id: str = Field(alias="recordingId")
     speaker: int
+
+
+class CreatedAppStreamKey(_Base):
+    """The answer that made an app stream key: the one time it is in full."""
+
+    created_at: str = Field(alias="createdAt")
+    id: str
+    masked_stream_key: str = Field(alias="maskedStreamKey")
+    name: str
+    server_url: str = Field(alias="serverUrl")
+    stream_key: str = Field(alias="streamKey")
 
 
 class CropRange(_Base):
@@ -1329,6 +1358,7 @@ class TranscriptionJob(_Base):
     error_code: Optional[str] = Field(default=None, alias="errorCode")
     finished_at: Optional[str] = Field(default=None, alias="finishedAt")
     has_audio: bool = Field(alias="hasAudio")
+    has_video: Optional[bool] = Field(default=None, alias="hasVideo")
     peaks: Optional[List[float]] = None
     preview: Optional[bool] = None
     progress: "JobProgress"
