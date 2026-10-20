@@ -28,6 +28,7 @@ import httpx
 from ._http import DEFAULT_BASE_URL, Transport
 from .realtime import Realtime
 from .resources import (
+    Batches,
     Billing,
     Broadcasts,
     Connect,
@@ -82,6 +83,7 @@ class VocalStack:
         self.realtime = Realtime(t, ready_deadline_s)
         self.broadcasts = Broadcasts(t)
         self.transcriptions = Transcriptions(t)
+        self.batches = Batches(t)
         self.recordings = Recordings(t, ready_deadline_s)
         self.jobs = Jobs(t)
         self.corrections = Corrections(t)

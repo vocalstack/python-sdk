@@ -26,6 +26,12 @@ AudioSourceState = Literal["ready", "error"]
 
 RecordingState = Literal["pending", "live", "paused", "processing", "ended", "finalized"]
 
+QueueReason = Literal["concurrency"]
+
+SourceKind = Literal["file", "url"]
+
+JobState = Literal["queued", "fetching", "transcribing", "done", "failed", "cropping", "stopped"]
+
 Lifecycle = Literal["active", "archived", "purged"]
 
 LatencyMode = Literal["auto", "fast", "accuracy"]
@@ -46,17 +52,11 @@ IngestState = Literal["connecting", "streaming", "reconnecting", "stopped", "fai
 
 InputKind = Literal["live", "file", "url", "stream"]
 
-QueueReason = Literal["concurrency"]
-
-JobState = Literal["queued", "fetching", "transcribing", "done", "failed", "cropping", "stopped"]
-
 LinkKind = Literal["live", "file", "unknown"]
 
 LoadingStage = Literal["download", "model"]
 
 RecordingKind = Literal["live", "upload"]
-
-SourceKind = Literal["file", "url"]
 
 PullState = Literal["connecting", "streaming", "reconnecting", "failed"]
 
@@ -220,6 +220,197 @@ class AutoTopUpView(_Base):
     threshold: Optional[float] = None
 
 
+class BatchCounts(_Base):
+    """How many of a batch's files are in each state."""
+
+    done: int
+    failed: int
+    queued: int
+    running: int
+    stopped: int
+
+
+class BroadcastRef(_Base):
+    """A broadcast a live transcription feeds (`Transcription.broadcasts`)."""
+
+    access: Access
+    code: str
+    id: str
+    name: str
+    share_url: str = Field(alias="shareUrl")
+
+
+class CurrentRecording(_Base):
+    """The recording in flight (`currentRecording`): on a transcription, its
+open recording; on a broadcast, the open recording
+of a live transcription feeding it, which is what its listeners are sent."""
+
+    recording_id: str = Field(alias="recordingId")
+    started_at: Optional[str] = Field(default=None, alias="startedAt")
+    state: RecordingState
+    transcription_id: Optional[str] = Field(default=None, alias="transcriptionId")
+
+
+class CropWindow(_Base):
+    """A window of the source, in seconds into it.  `end_s` absent = to the end."""
+
+    end_s: Optional[float] = Field(default=None, alias="endS")
+    start_s: float = Field(alias="startS")
+
+
+class JobProgress(_Base):
+    fetch_total_bytes: Optional[int] = Field(default=None, alias="fetchTotalBytes")
+    fetched_bytes: Optional[int] = Field(default=None, alias="fetchedBytes")
+    pct: int
+    phase: Optional[str] = None
+    phase_pct: Optional[int] = Field(default=None, alias="phasePct")
+    processed_s: float = Field(alias="processedS")
+    segments_done: int = Field(alias="segmentsDone")
+    segments_total: Optional[int] = Field(default=None, alias="segmentsTotal")
+    total_s: Optional[float] = Field(default=None, alias="totalS")
+
+
+class JobQueue(_Base):
+    """Why a `queued` job is waiting, and where it stands (`Job.queue`)."""
+
+    position: int
+    reason: QueueReason
+
+
+class SourceInfo(_Base):
+    """What the recording was made from (design `j.meta`: "M4A · 34.2 MB",
+"Video URL")."""
+
+    bytes: Optional[int] = None
+    duration_s: Optional[float] = Field(default=None, alias="durationS")
+    format: Optional[str] = None
+    kind: SourceKind
+    mime: Optional[str] = None
+    name: str
+    url: Optional[str] = None
+
+
+class TranscriptionJob(_Base):
+    attempts: int
+    created_at: str = Field(alias="createdAt")
+    crop: Optional["CropWindow"] = None
+    error: Optional[str] = None
+    error_code: Optional[str] = Field(default=None, alias="errorCode")
+    finished_at: Optional[str] = Field(default=None, alias="finishedAt")
+    has_audio: bool = Field(alias="hasAudio")
+    has_video: Optional[bool] = Field(default=None, alias="hasVideo")
+    peaks: Optional[List[float]] = None
+    preview: Optional[bool] = None
+    progress: "JobProgress"
+    queue: Optional["JobQueue"] = None
+    recording_id: str = Field(alias="recordingId")
+    source: Optional["SourceInfo"] = None
+    started_at: Optional[str] = Field(default=None, alias="startedAt")
+    state: JobState
+    transcription_id: str = Field(alias="transcriptionId")
+
+
+class LastRecording(_Base):
+    """A live transcription's newest recording (`lastRecording`): what
+its row in a list reads from — how long it ran, when, and whether it is
+still running — and the recording a tap on that row opens."""
+
+    duration_s: Optional[float] = Field(default=None, alias="durationS")
+    recording_id: str = Field(alias="recordingId")
+    started_at: Optional[str] = Field(default=None, alias="startedAt")
+    state: RecordingState
+    title: Optional[str] = None
+    transcription_id: Optional[str] = Field(default=None, alias="transcriptionId")
+
+
+class ConfidencePolicy(_Base):
+    """Env defaults, overridden per broadcast, transcription or recording."""
+
+    hide_below: Optional[float] = Field(default=None, alias="hideBelow")
+    low_threshold: Optional[float] = Field(default=None, alias="lowThreshold")
+    suppress_count: Optional[int] = Field(default=None, alias="suppressCount")
+
+
+class Settings(_Base):
+    """A broadcast's, transcription's or recording's capture settings (the
+design's settings sheet): what a recording made in it starts with."""
+
+    confidence: Optional["ConfidencePolicy"] = None
+    latency_mode: Optional[LatencyMode] = Field(default=None, alias="latencyMode")
+    max_duration_s: Optional[int] = Field(default=None, alias="maxDurationS")
+    max_pause_s: Optional[int] = Field(default=None, alias="maxPauseS")
+    silence_auto_pause_s: Optional[int] = Field(default=None, alias="silenceAutoPauseS")
+    speaker_labels: Optional[SpeakerLabels] = Field(default=None, alias="speakerLabels")
+    spoken_language: Optional[str] = Field(default=None, alias="spokenLanguage")
+    summary: Optional[bool] = None
+    summary_translations: Optional[bool] = Field(default=None, alias="summaryTranslations")
+    title: Optional[bool] = None
+    voice: Optional[bool] = None
+    voice_by_lang: Optional[Dict[str, str]] = Field(default=None, alias="voiceByLang")
+
+
+class Transcription(_Base):
+    """A transcription: a file, a link (with its `transcription` job), or
+something captured as it is spoken (`live: true`: a microphone, a
+stream, an RTMP encoder), which may feed broadcasts (`broadcasts`)."""
+
+    archived_at: Optional[str] = Field(default=None, alias="archivedAt")
+    batch_id: Optional[str] = Field(default=None, alias="batchId")
+    broadcasts: Optional[List["BroadcastRef"]] = None
+    code: str
+    created_at: str = Field(alias="createdAt")
+    created_by_api_key_id: Optional[str] = Field(default=None, alias="createdByApiKeyId")
+    current_recording: Optional["CurrentRecording"] = Field(default=None, alias="currentRecording")
+    id: str
+    job: Optional["TranscriptionJob"] = None
+    kind: Literal["transcription"] = "transcription"
+    last_recorded_at: Optional[str] = Field(default=None, alias="lastRecordedAt")
+    last_recording: Optional["LastRecording"] = Field(default=None, alias="lastRecording")
+    lifecycle: Lifecycle
+    live: Optional[bool] = None
+    name: str
+    owner_principal_id: str = Field(alias="ownerPrincipalId")
+    purge_after: Optional[str] = Field(default=None, alias="purgeAfter")
+    recording_count: int = Field(alias="recordingCount")
+    settings: "Settings"
+    share_url: str = Field(alias="shareUrl")
+    source: "CaptureSource"
+    updated_at: str = Field(alias="updatedAt")
+
+
+class BatchSettings(_Base):
+    """What every file of a batch runs with.  Summary, title, voices and the
+share link are never made for a batch file, so they are not here."""
+
+    latency_mode: Optional[LatencyMode] = Field(default=None, alias="latencyMode")
+    speaker_labels: Optional[SpeakerLabels] = Field(default=None, alias="speakerLabels")
+    spoken_language: Optional[str] = Field(default=None, alias="spokenLanguage")
+
+
+class Batch(_Base):
+    """A batch of files."""
+
+    counts: "BatchCounts"
+    created_at: str = Field(alias="createdAt")
+    created_by_api_key_id: Optional[str] = Field(default=None, alias="createdByApiKeyId")
+    file_count: int = Field(alias="fileCount")
+    files: Optional[List["Transcription"]] = None
+    files_per_batch: Optional[int] = Field(default=None, alias="filesPerBatch")
+    finished_at: Optional[str] = Field(default=None, alias="finishedAt")
+    id: str
+    name: str
+    settings: "BatchSettings"
+    started_at: Optional[str] = Field(default=None, alias="startedAt")
+    state: str
+
+
+class BatchPage(_Base):
+    """`GET /v1/batches`: one page, newest first."""
+
+    batches: List["Batch"]
+    next_cursor: Optional[str] = Field(default=None, alias="nextCursor")
+
+
 class BillingDetails(_Base):
     """`GET / PUT /v1/billing/details`."""
 
@@ -253,6 +444,7 @@ class Limits2(_Base):
     concurrent_transcriptions: Optional[int] = Field(default=None, alias="concurrentTranscriptions")
     creates_per_hour: Optional[int] = Field(default=None, alias="createsPerHour")
     creates_per_hour_unpaid: Optional[int] = Field(default=None, alias="createsPerHourUnpaid")
+    files_per_batch: Optional[int] = Field(default=None, alias="filesPerBatch")
     max_file_bytes: Optional[int] = Field(default=None, alias="maxFileBytes")
     max_live_seconds: Optional[int] = Field(default=None, alias="maxLiveSeconds")
     requests_per_min: Optional[int] = Field(default=None, alias="requestsPerMin")
@@ -407,53 +599,6 @@ running transcriptions go on below zero, never how far."""
     top_up_url: str = Field(alias="topUpUrl")
 
 
-class CurrentRecording(_Base):
-    """The recording in flight (`currentRecording`): on a transcription, its
-open recording; on a broadcast, the open recording
-of a live transcription feeding it, which is what its listeners are sent."""
-
-    recording_id: str = Field(alias="recordingId")
-    started_at: Optional[str] = Field(default=None, alias="startedAt")
-    state: RecordingState
-    transcription_id: Optional[str] = Field(default=None, alias="transcriptionId")
-
-
-class LastRecording(_Base):
-    """A live transcription's newest recording (`lastRecording`): what
-its row in a list reads from — how long it ran, when, and whether it is
-still running — and the recording a tap on that row opens."""
-
-    duration_s: Optional[float] = Field(default=None, alias="durationS")
-    recording_id: str = Field(alias="recordingId")
-    started_at: Optional[str] = Field(default=None, alias="startedAt")
-    state: RecordingState
-    title: Optional[str] = None
-    transcription_id: Optional[str] = Field(default=None, alias="transcriptionId")
-
-
-class ConfidencePolicy(_Base):
-    """Env defaults, overridden per broadcast, transcription or recording."""
-
-    hide_below: Optional[float] = Field(default=None, alias="hideBelow")
-    low_threshold: Optional[float] = Field(default=None, alias="lowThreshold")
-    suppress_count: Optional[int] = Field(default=None, alias="suppressCount")
-
-
-class Settings(_Base):
-    """A broadcast's, transcription's or recording's capture settings (the
-design's settings sheet): what a recording made in it starts with."""
-
-    confidence: Optional["ConfidencePolicy"] = None
-    latency_mode: Optional[LatencyMode] = Field(default=None, alias="latencyMode")
-    max_duration_s: Optional[int] = Field(default=None, alias="maxDurationS")
-    max_pause_s: Optional[int] = Field(default=None, alias="maxPauseS")
-    silence_auto_pause_s: Optional[int] = Field(default=None, alias="silenceAutoPauseS")
-    speaker_labels: Optional[SpeakerLabels] = Field(default=None, alias="speakerLabels")
-    spoken_language: Optional[str] = Field(default=None, alias="spokenLanguage")
-    voice: Optional[bool] = None
-    voice_by_lang: Optional[Dict[str, str]] = Field(default=None, alias="voiceByLang")
-
-
 class TranscriptionRef(_Base):
     """A live transcription feeding a broadcast (`Broadcast.transcriptions`)."""
 
@@ -492,16 +637,6 @@ those live transcriptions."""
     source: "CaptureSource"
     transcriptions: Optional[List["TranscriptionRef"]] = None
     updated_at: str = Field(alias="updatedAt")
-
-
-class BroadcastRef(_Base):
-    """A broadcast a live transcription feeds (`Transcription.broadcasts`)."""
-
-    access: Access
-    code: str
-    id: str
-    name: str
-    share_url: str = Field(alias="shareUrl")
 
 
 class Limits(_Base):
@@ -653,6 +788,13 @@ class CreateAudioSource(_Base):
     url: str
 
 
+class CreateBatch(_Base):
+    """`POST /v1/batches`."""
+
+    name: Optional[str] = None
+    settings: Optional["BatchSettings"] = None
+
+
 class CreateBroadcast(_Base):
     """`POST /v1/broadcasts`."""
 
@@ -712,6 +854,9 @@ class SettingsPatch(_Base):
     silence_auto_pause_s: Optional[int] = Field(default=None, alias="silenceAutoPauseS")
     speaker_labels: Optional[SpeakerLabels] = Field(default=None, alias="speakerLabels")
     spoken_language: Optional[str] = Field(default=None, alias="spokenLanguage")
+    summary: Optional[bool] = None
+    summary_translations: Optional[bool] = Field(default=None, alias="summaryTranslations")
+    title: Optional[bool] = None
     voice: Optional[bool] = None
     voice_by_lang: Optional[Dict[str, str]] = Field(default=None, alias="voiceByLang")
 
@@ -765,13 +910,6 @@ class CropRange(_Base):
     start_s: Optional[float] = Field(default=None, alias="startS")
 
 
-class CropWindow(_Base):
-    """A window of the source, in seconds into it.  `end_s` absent = to the end."""
-
-    end_s: Optional[float] = Field(default=None, alias="endS")
-    start_s: float = Field(alias="startS")
-
-
 class DraftSegment(_Base):
     speaker: int
     start: float
@@ -802,25 +940,6 @@ class InputOptions(_Base):
     kind: Optional[InputKind] = None
     prepare: Optional[bool] = None
     url: Optional[str] = None
-
-
-class JobProgress(_Base):
-    fetch_total_bytes: Optional[int] = Field(default=None, alias="fetchTotalBytes")
-    fetched_bytes: Optional[int] = Field(default=None, alias="fetchedBytes")
-    pct: int
-    phase: Optional[str] = None
-    phase_pct: Optional[int] = Field(default=None, alias="phasePct")
-    processed_s: float = Field(alias="processedS")
-    segments_done: int = Field(alias="segmentsDone")
-    segments_total: Optional[int] = Field(default=None, alias="segmentsTotal")
-    total_s: Optional[float] = Field(default=None, alias="totalS")
-
-
-class JobQueue(_Base):
-    """Why a `queued` job is waiting, and where it stands (`Job.queue`)."""
-
-    position: int
-    reason: QueueReason
 
 
 class KnownVoice(_Base):
@@ -1057,19 +1176,6 @@ class PublisherInfo(_Base):
     attached: bool
     lease_expires_at: Optional[str] = Field(default=None, alias="leaseExpiresAt")
     machine_id: Optional[str] = Field(default=None, alias="machineId")
-
-
-class SourceInfo(_Base):
-    """What the recording was made from (design `j.meta`: "M4A · 34.2 MB",
-"Video URL")."""
-
-    bytes: Optional[int] = None
-    duration_s: Optional[float] = Field(default=None, alias="durationS")
-    format: Optional[str] = None
-    kind: SourceKind
-    mime: Optional[str] = None
-    name: str
-    url: Optional[str] = None
 
 
 class Recording(_Base):
@@ -1348,54 +1454,6 @@ class TranscriptSnapshot(_Base):
     speaker_labels: Optional[SpeakerLabels] = Field(default=None, alias="speakerLabels")
     speakers: List["SpeakerView"]
     state: RecordingState
-
-
-class TranscriptionJob(_Base):
-    attempts: int
-    created_at: str = Field(alias="createdAt")
-    crop: Optional["CropWindow"] = None
-    error: Optional[str] = None
-    error_code: Optional[str] = Field(default=None, alias="errorCode")
-    finished_at: Optional[str] = Field(default=None, alias="finishedAt")
-    has_audio: bool = Field(alias="hasAudio")
-    has_video: Optional[bool] = Field(default=None, alias="hasVideo")
-    peaks: Optional[List[float]] = None
-    preview: Optional[bool] = None
-    progress: "JobProgress"
-    queue: Optional["JobQueue"] = None
-    recording_id: str = Field(alias="recordingId")
-    source: Optional["SourceInfo"] = None
-    started_at: Optional[str] = Field(default=None, alias="startedAt")
-    state: JobState
-    transcription_id: str = Field(alias="transcriptionId")
-
-
-class Transcription(_Base):
-    """A transcription: a file, a link (with its `transcription` job), or
-something captured as it is spoken (`live: true`: a microphone, a
-stream, an RTMP encoder), which may feed broadcasts (`broadcasts`)."""
-
-    archived_at: Optional[str] = Field(default=None, alias="archivedAt")
-    broadcasts: Optional[List["BroadcastRef"]] = None
-    code: str
-    created_at: str = Field(alias="createdAt")
-    created_by_api_key_id: Optional[str] = Field(default=None, alias="createdByApiKeyId")
-    current_recording: Optional["CurrentRecording"] = Field(default=None, alias="currentRecording")
-    id: str
-    job: Optional["TranscriptionJob"] = None
-    kind: Literal["transcription"] = "transcription"
-    last_recorded_at: Optional[str] = Field(default=None, alias="lastRecordedAt")
-    last_recording: Optional["LastRecording"] = Field(default=None, alias="lastRecording")
-    lifecycle: Lifecycle
-    live: Optional[bool] = None
-    name: str
-    owner_principal_id: str = Field(alias="ownerPrincipalId")
-    purge_after: Optional[str] = Field(default=None, alias="purgeAfter")
-    recording_count: int = Field(alias="recordingCount")
-    settings: "Settings"
-    share_url: str = Field(alias="shareUrl")
-    source: "CaptureSource"
-    updated_at: str = Field(alias="updatedAt")
 
 
 class TranscriptionPage(_Base):

@@ -269,6 +269,116 @@ class Transcriptions(_ParentResource):
         return _one(m.Transcription, data)
 
 
+class Batches(_Group):
+    """``vs.batches``: several files transcribed together, for less than a
+    transcription each (one create, one minimum charge). Create a batch, add
+    each file or link with ``add_file``, then ``start`` it; ``get`` shows its
+    files (each a transcription with its job) and their counts. A batch's
+    files get no summary, title, share link or spoken translations."""
+
+    @staticmethod
+    def _path(id: str, rest: str = "") -> str:
+        return f"/v1/batches/{_p(id)}{rest}"
+
+    async def create(self, *, idempotency_key: Optional[str] = None, **fields: Any) -> m.Batch:
+        """An open batch, ready for files (``name`` defaults to "Batch of
+        <date>"; ``settings``: ``spoken_language``, ``speaker_labels``,
+        ``latency_mode`` for every file)."""
+        body = _body(m.CreateBatch, fields)
+        return _one(m.Batch, await self._t.json("POST", "/v1/batches", json_body=body, idempotency_key=idempotency_key))
+
+    async def list(self) -> List[m.Batch]:
+        """Every batch, newest first (every page of ``list_page``); each with its counts, not its files."""
+        items = await _all_pages(lambda c: self._t.json("GET", "/v1/batches", query={"cursor": c}), "batches")
+        return [m.Batch.model_validate(x) for x in items]
+
+    async def list_page(self, *, cursor: Optional[str] = None, limit: Optional[int] = None) -> m.BatchPage:
+        """One page of batches, newest first; ``cursor`` is the previous page's ``next_cursor``."""
+        return _one(m.BatchPage, await self._t.json("GET", "/v1/batches", query={"cursor": cursor, "limit": limit}))
+
+    async def get(self, id: str) -> m.Batch:
+        """A batch with its files (``files``, each a transcription with its job), in the order they were added."""
+        return _one(m.Batch, await self._t.json("GET", self._path(id)))
+
+    async def delete(self, id: str) -> None:
+        """Discard a batch that was never started, with its files (nothing was charged)."""
+        await self._t.json("DELETE", self._path(id))
+
+    async def add_file(
+        self,
+        id: str,
+        *,
+        file: Optional[Upload] = None,
+        file_name: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+        **fields: Any,
+    ) -> m.Transcription:
+        """Add one file (``file``: a path, bytes or an open binary file) or
+        public link (``url=...``) to an open batch: a transcription of its
+        own (``batch_id``), waiting for the batch's ``start``. Of the
+        transcription options it takes ``name``, ``start_s``, ``end_s`` and
+        ``duration_s`` (the settings are the batch's)."""
+        options = _body(m.CreateTranscription, fields)
+        if file is None:
+            data = await self._t.json("POST", self._path(id, "/files"), json_body=options, idempotency_key=idempotency_key)
+        else:
+            part = await asyncio.to_thread(_file_part, file, file_name, "upload")
+            data = await self._t.json(
+                "POST",
+                self._path(id, "/files"),
+                data={"options": json.dumps(options)},
+                files={"file": part},
+                idempotency_key=idempotency_key,
+            )
+        return _one(m.Transcription, data)
+
+    async def add_url(self, id: str, url: str, **fields: Any) -> m.Transcription:
+        """``add_file(id, url=url, ...)``."""
+        return await self.add_file(id, url=url, **fields)
+
+    async def start(self, id: str, *, idempotency_key: Optional[str] = None) -> m.Batch:
+        """Seal the batch and queue its files, longest first; ``wait`` follows it to the end."""
+        return _one(m.Batch, await self._t.json("POST", self._path(id, "/start"), idempotency_key=idempotency_key))
+
+    async def export(self, id: str, format: str) -> bytes:
+        """Every finished file's transcript in one ``format`` (``json``,
+        ``srt``, ``xlsx`` or ``pdf``, as ``recordings.export`` makes one), in
+        one zip: its bytes. Files still running or failed are left out."""
+        resp = await self._t.raw("GET", self._path(id, "/export"), headers={"accept": "*/*"}, query={"format": format})
+        return resp.content
+
+    async def stop(self, id: str) -> m.Batch:
+        """Stop every file not finished yet: queued files never start, a
+        running one is cancelled and billed for what it transcribed."""
+        return _one(m.Batch, await self._t.json("POST", self._path(id, "/stop")))
+
+    async def wait(
+        self,
+        id: str,
+        *,
+        interval_s: float = 5.0,
+        timeout_s: Optional[float] = None,
+        on_progress: Optional[Callable[[m.Batch], None]] = None,
+    ) -> m.Batch:
+        """Poll a started batch until it is ``done`` (every file finished or
+        failed) or ``stopped``, and return it with its files. It does not
+        raise on a failed file: check ``counts.failed`` and each file's
+        ``job.state``. ``on_progress`` sees every read, the last one included."""
+        deadline = None if timeout_s is None else time.monotonic() + timeout_s
+        while True:
+            batch = await self.get(id)
+            if on_progress is not None:
+                on_progress(batch)
+            # Closed: every file over (a stopped batch's running file too).
+            if batch.state in ("done", "stopped") and batch.finished_at:
+                return batch
+            if batch.state == "open":
+                raise VocalStackError("invalid_state", "the batch is open: start it before waiting for it")
+            if deadline is not None and time.monotonic() + interval_s > deadline:
+                raise VocalStackError("timeout", f"batch still {batch.state} after {timeout_s}s", retryable=True)
+            await asyncio.sleep(interval_s)
+
+
 class Recordings(_Group):
     """``vs.recordings``: one take, live or uploaded."""
 
