@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "vocalstack"
-version = "1.0.0a0"
+version = "1.0.0a1"
 description = "VocalStack speech API SDK (asyncio): one client grouped by resource, typed models from the API contract, realtime WebSocket streaming."
 readme = "README.md"
 license = "MIT"
