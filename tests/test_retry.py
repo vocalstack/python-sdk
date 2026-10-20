@@ -1,7 +1,7 @@
 """The transport's retries and the socket upgrade's refusals, against
 httpx.MockTransport (no network):
 
-    python -m unittest discover -s sdks/python/tests
+    python -m unittest discover -s tests
 """
 
 import asyncio

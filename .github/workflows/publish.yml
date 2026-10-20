@@ -2,9 +2,6 @@
 # vocalstack/python-sdk (tag v<version>, the version in pyproject.toml,
 # e.g. v1.0.0a0).  PyPI trusts this repository, this workflow and the
 # `pypi` environment (trusted publishing), so there is no token.
-#
-# This file lives in the monorepo at sdks/python/.github/ and reaches
-# python-sdk with the rest of the SDK (scripts/sdk_repos.sh); edit it there.
 
 name: publish
 

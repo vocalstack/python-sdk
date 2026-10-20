@@ -1,5 +1,4 @@
-# Packaging: hatchling copies the nearest .gitignore into the sdist, so this
-# one stands in for the monorepo root's.
+# Packaging: hatchling reads the nearest .gitignore when it builds the sdist.
 .venv/
 dist/
 build/

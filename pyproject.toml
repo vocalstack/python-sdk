@@ -1,5 +1,5 @@
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.27"]
 build-backend = "hatchling.build"
 
 [project]
@@ -7,7 +7,8 @@ name = "vocalstack"
 version = "1.0.0a0"
 description = "VocalStack speech API SDK (asyncio): one client grouped by resource, typed models from the API contract, realtime WebSocket streaming."
 readme = "README.md"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 requires-python = ">=3.10"
 dependencies = [
     "httpx>=0.27",
@@ -28,4 +29,4 @@ packages = ["src/vocalstack"]
 
 # An explicit list: nothing else from the repository goes into the sdist.
 [tool.hatch.build.targets.sdist]
-only-include = ["src/vocalstack", "README.md", "SKILL.md", "skills", "pyproject.toml"]
+only-include = ["src/vocalstack", "LICENSE", "README.md", "SKILL.md", "skills", "pyproject.toml"]

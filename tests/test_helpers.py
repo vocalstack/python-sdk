@@ -2,7 +2,7 @@
 ``on_progress`` (against httpx.MockTransport) and a realtime socket's
 ``on_frame`` (against a local WebSocket server). No network:
 
-    python -m unittest discover -s sdks/python/tests
+    python -m unittest discover -s tests
 """
 
 import asyncio

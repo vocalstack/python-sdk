@@ -1,6 +1,6 @@
 """``vs.connect.token()`` against httpx.MockTransport (no network):
 
-    python -m unittest discover -s sdks/python/tests
+    python -m unittest discover -s tests
 """
 
 import asyncio

@@ -1,7 +1,7 @@
 """The paged lists against httpx.MockTransport: the plain methods read every
 page through ``nextCursor``, the ``*_page`` methods ask for one. No network:
 
-    python -m unittest discover -s sdks/python/tests
+    python -m unittest discover -s tests
 """
 
 import asyncio

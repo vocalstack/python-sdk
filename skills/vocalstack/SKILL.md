@@ -31,16 +31,6 @@ python3 -m venv .venv && . .venv/bin/activate   # system Pythons refuse a bare p
 pip install vocalstack                           # Python 3.10 or newer
 ```
 
-Before the package is published, any account installs
-the private build its environment serves: the API reference's Install section
-(`<base>/docs`, or Developers -> API reference in the app) and `<base>/sdk/latest`
-give the exact commands, which send `VOCALSTACK_API_KEY` to that host only.
-Or install it from a local checkout of the repository:
-
-```sh
-pip install -e /absolute/path/to/transcribe/sdks/python
-```
-
 Live transcription (program 4) also needs `ffmpeg` on PATH.
 
 Speaker numbers start at 0. A speaker of `-1` means speaker labels were off
@@ -57,8 +47,7 @@ for that transcription, so print the text without a speaker.
 - Scopes: `read` (read transcripts, search, export), `write` and
   `recordings:publish` (create transcriptions, stream live audio), or `*`.
 - Base URL: `https://api.vocalstack.com` (the default). Override it with
-  `VOCALSTACK_BASE_URL`: `http://127.0.0.1:8090` for a local server,
-  `https://api.e2e.vocalstack.com` for e2e.
+  `VOCALSTACK_BASE_URL` (for example, a local or staging server).
 
 Every program below opens the client the same way, inside `async def main()`
 run with `asyncio.run(main())` (a `None` base URL means the default):
