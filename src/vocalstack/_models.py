@@ -487,6 +487,7 @@ class Rates(_Base):
     """The rate card of a version: dollars per hour, and the least a
 transcription is billed."""
 
+    batch_file_minimum_seconds: Optional[int] = Field(default=None, alias="batchFileMinimumSeconds")
     file_per_hour: float = Field(alias="filePerHour")
     live_per_hour: float = Field(alias="livePerHour")
     minimum_seconds: int = Field(alias="minimumSeconds")
