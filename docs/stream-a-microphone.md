@@ -35,7 +35,7 @@ The SDKs' `connect` resolves at `session.ready` and fails if the server goes qui
 
 ## 3. Send audio
 
-Audio goes in as binary frames of raw PCM: 32-bit float little-endian, 16 kHz, mono (`pcm_f32le`). Send it as it is captured, in chunks of about 100 to 250 ms (6,400 to 16,000 bytes); there is no need to wait for the transcript between chunks. In a browser, `streamMicrophone` (`@vocalstack/sdk/mic`) asks for the microphone, resamples to 16 kHz, sends the chunks and the `clock` frames that let the server mark gaps when a tab is throttled.
+Audio goes in as binary frames of raw PCM: 32-bit float little-endian, 16 kHz, mono (`pcm_f32le`). Send it as it is captured, in chunks of about 100 to 250 ms (6,400 to 16,000 bytes); there is no need to wait for the transcript between chunks. In a browser, `streamMicrophone` (`@vocalstack/js-sdk/mic`) asks for the microphone, resamples to 16 kHz, sends the chunks and the `clock` frames that let the server mark gaps when a tab is throttled.
 
 You can change `spokenLanguage`, `translate`, `speakerLabels` or `latencyMode` mid-stream with a `session.update` text frame (`session.update(…)` in the SDKs); it applies to what follows.
 
