@@ -38,6 +38,8 @@ LatencyMode = Literal["auto", "fast", "accuracy"]
 
 SpeakerLabels = Literal["auto", "on", "off"]
 
+ClientKind = Literal["dashboard", "chrome_extension", "mac_app", "obs_plugin", "sdk", "other"]
+
 Decoder = Literal["fast", "accuracy"]
 
 NotVoicedReason = Literal["rewrite"]
@@ -51,6 +53,8 @@ HealthStatus = Literal["ok"]
 IngestState = Literal["connecting", "streaming", "reconnecting", "stopped", "failed"]
 
 InputKind = Literal["live", "file", "url", "stream"]
+
+LanguageStatusState = Literal["matches", "mismatch", "unknown", "change_unsupported"]
 
 LinkKind = Literal["live", "file", "unknown"]
 
@@ -977,6 +981,16 @@ class LanguageLists(_Base):
     voice: List[str]
 
 
+class LanguageMismatch(_Base):
+    """`Recording.languageMismatches`: a stretch where the speech was not the
+pinned spoken language."""
+
+    confidence: Optional[float] = None
+    detected: Optional[str] = None
+    from_media_s: Optional[float] = Field(default=None, alias="fromMediaS")
+    to_media_s: Optional[float] = Field(default=None, alias="toMediaS")
+
+
 class LedgerEntry(_Base):
     """A ledger entry on the wire (`GET /v1/billing/ledger`)."""
 
@@ -1187,6 +1201,7 @@ class Recording(_Base):
     id: str
     ingest: Optional["StreamIngest"] = None
     kind: RecordingKind
+    language_mismatches: Optional[List["LanguageMismatch"]] = Field(default=None, alias="languageMismatches")
     last_seq: int = Field(alias="lastSeq")
     lifecycle: Lifecycle
     max_duration_s: int = Field(alias="maxDurationS")
@@ -1607,6 +1622,14 @@ class VoiceTrack(_Base):
     word_times: Optional[Dict[str, List[List[float]]]] = Field(default=None, alias="wordTimes")
 
 
+class WarmRequest(_Base):
+    """What a client says on activity."""
+
+    can_start: bool = Field(alias="canStart")
+    client_kind: ClientKind = Field(alias="clientKind")
+    spoken_language: Optional[str] = Field(default=None, alias="spokenLanguage")
+
+
 class YearlyOptIn(_Base):
     """`POST /v1/billing/subscription/yearly-opt-in`."""
 
@@ -1759,6 +1782,30 @@ class TranscriptVoiceStatus(_Base):
     voice_key: Optional[str] = Field(default=None, alias="voiceKey")
 
 
+class TranscriptLanguageStatus(_Base):
+    confidence: Optional[float] = None
+    detected: Optional[str] = None
+    expected: str
+    from_media_s: Optional[float] = Field(default=None, alias="fromMediaS")
+    message: str
+    state: LanguageStatusState
+    type: Literal["transcript.languageStatus"] = "transcript.languageStatus"
+
+
+class TranscriptRetracted(_Base):
+    from_media_s: float = Field(alias="fromMediaS")
+    seqs: List[int]
+    type: Literal["transcript.retracted"] = "transcript.retracted"
+
+
+class TranscriptHeld(_Base):
+    from_media_s: float = Field(alias="fromMediaS")
+    held: bool
+    language: Optional[str] = None
+    outcome: Optional[str] = None
+    type: Literal["transcript.held"] = "transcript.held"
+
+
 class TranscriptProgress(_Base):
     processed_s: float = Field(alias="processedS")
     total_s: Optional[float] = Field(default=None, alias="totalS")
@@ -1805,7 +1852,7 @@ class ErrorFrame(_Base):
     type: Literal["error"] = "error"
 
 
-ServerFrame = Annotated[Union[SessionLoading, SessionReady, TranscriptCommitted, TranscriptDraft, TranscriptWords, TranscriptAmended, TranscriptLatency, TranscriptSpeaker, TranscriptSpeakerGender, TranscriptSpeakerIdentified, TranscriptSentence, TranscriptTranslated, TranscriptVoice, TranscriptVoiceStatus, TranscriptProgress, StreamPull, SourceProgress, SourcePrepared, SessionDone, ErrorFrame], Field(discriminator="type")]
+ServerFrame = Annotated[Union[SessionLoading, SessionReady, TranscriptCommitted, TranscriptDraft, TranscriptWords, TranscriptAmended, TranscriptLatency, TranscriptSpeaker, TranscriptSpeakerGender, TranscriptSpeakerIdentified, TranscriptSentence, TranscriptTranslated, TranscriptVoice, TranscriptVoiceStatus, TranscriptLanguageStatus, TranscriptRetracted, TranscriptHeld, TranscriptProgress, StreamPull, SourceProgress, SourcePrepared, SessionDone, ErrorFrame], Field(discriminator="type")]
 
 class SubscribeUpdate(_Base):
     audio: Optional[bool] = None
@@ -1946,12 +1993,12 @@ class SubscribeGap(_Base):
 
 SubscriberFrame = Annotated[Union[SubscribeReady, RecordingState, RecordingSettings, RecordingSilence, RecordingExpiring, TranscriptCorrected, TranscriptSpeakerGender, TranscriptSpeakerIdentified, TranscriptSpeakerNamed, RecordingStarted, JobProgress, StreamIngest, RecordingEnded, Audience, SubscribeGap], Field(discriminator="type")]
 
-SERVER_FRAME_TYPES = frozenset(["session.loading", "session.ready", "transcript.committed", "transcript.draft", "transcript.words", "transcript.amended", "transcript.latency", "transcript.speaker", "transcript.speakerGender", "transcript.speakerIdentified", "transcript.sentence", "transcript.translated", "transcript.voice", "transcript.voiceStatus", "transcript.progress", "stream.pull", "source.progress", "source.prepared", "session.done", "error"])
+SERVER_FRAME_TYPES = frozenset(["session.loading", "session.ready", "transcript.committed", "transcript.draft", "transcript.words", "transcript.amended", "transcript.latency", "transcript.speaker", "transcript.speakerGender", "transcript.speakerIdentified", "transcript.sentence", "transcript.translated", "transcript.voice", "transcript.voiceStatus", "transcript.languageStatus", "transcript.retracted", "transcript.held", "transcript.progress", "stream.pull", "source.progress", "source.prepared", "session.done", "error"])
 
 _server_frame_adapter: TypeAdapter[ServerFrame] = TypeAdapter(ServerFrame)
 
 
-TranscriptEvent = Union[TranscriptCommitted, TranscriptDraft, TranscriptWords, TranscriptAmended, TranscriptLatency, TranscriptSpeaker, TranscriptSpeakerGender, TranscriptSpeakerIdentified, TranscriptSentence, TranscriptTranslated, TranscriptVoice, TranscriptVoiceStatus, TranscriptProgress]
+TranscriptEvent = Union[TranscriptCommitted, TranscriptDraft, TranscriptWords, TranscriptAmended, TranscriptLatency, TranscriptSpeaker, TranscriptSpeakerGender, TranscriptSpeakerIdentified, TranscriptSentence, TranscriptTranslated, TranscriptVoice, TranscriptVoiceStatus, TranscriptLanguageStatus, TranscriptRetracted, TranscriptHeld, TranscriptProgress]
 
 
 def parse_server_frame(text: str) -> Optional[ServerFrame]:

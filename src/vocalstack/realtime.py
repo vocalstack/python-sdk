@@ -23,6 +23,7 @@ from ._models import (
     SessionOptions,
     SessionStats,
     TranscriptEvent,
+    WarmRequest,
     parse_server_frame,
 )
 from .errors import VocalStackError, capacity_exceeded, from_envelope
@@ -367,6 +368,14 @@ class Realtime:
     async def capabilities(self) -> Capabilities:
         """Languages, audio formats and limits."""
         return Capabilities.model_validate(await self._t.json("GET", "/v1/realtime/capabilities"))
+
+    async def warm(self, client_kind: str, can_start: bool, spoken_language: Optional[str] = None) -> None:
+        """A person is using a screen that can start a live transcription, so
+        the one they start next is ready at once. Send it on real use, at most
+        every 30 seconds, and at once when the selected spoken language
+        changes (``None``: auto-detect)."""
+        body = WarmRequest.model_validate({"clientKind": client_kind, "canStart": can_start, "spokenLanguage": spoken_language})
+        await self._t.json("POST", "/v1/realtime/warm", json_body=body.model_dump(by_alias=True, exclude_none=True))
 
     async def transcribe_file(
         self,
