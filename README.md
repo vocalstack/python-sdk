@@ -5,6 +5,8 @@ The VocalStack speech API for Python (3.10 or newer, asyncio): one client,
 are pydantic models generated from the API's one OpenAPI document
 (`/v1/openapi.json`), with snake_case attributes.
 
+Read more about the [VocalStack Python SDK](https://vocalstack.com/#developers) and our other SDKs on the [VocalStack website](https://vocalstack.com/).
+
 ```python
 import asyncio, os
 from vocalstack import VocalStack
