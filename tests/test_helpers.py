@@ -13,6 +13,7 @@ import httpx
 import websockets
 
 from vocalstack import VocalStack
+from vocalstack.errors import VocalStackError
 from vocalstack.realtime import RealtimeSession
 
 
@@ -82,6 +83,50 @@ class OnFrame(unittest.TestCase):
         self.assertEqual(events, ["transcript.draft", "transcript.committed"])
         self.assertEqual(frames, ["session.loading", "session.ready", "transcript.draft", "transcript.committed", "session.done"])
         self.assertEqual(reason, "eof")
+
+
+
+class EngineLost(unittest.TestCase):
+    def test_a_socket_that_closes_with_no_session_done_is_engine_lost_not_a_quiet_end(self):
+        async def serve(ws):
+            await ws.send(json.dumps({"type": "session.ready", "sessionId": "s1"}))
+            await ws.send(json.dumps({"type": "transcript.committed", "segment": {"seq": 0, "start": 0, "end": 1, "text": "before the loss", "speaker": 0, "words": []}}))
+            # The engine's machine is gone: the connection just ends.
+            await asyncio.sleep(0.02)
+            ws.transport.abort()
+
+        async def go():
+            events = []
+            async with websockets.serve(serve, "127.0.0.1", 0) as server:
+                port = server.sockets[0].getsockname()[1]
+                session = await RealtimeSession.connect("s1", f"ws://127.0.0.1:{port}/v1/realtime/sessions/t/socket")
+                try:
+                    async for ev in session:
+                        events.append(ev.type)
+                except VocalStackError as e:
+                    return events, e, session.done_reason
+            return events, None, session.done_reason
+
+        events, err, reason = run(go())
+        self.assertEqual(events, ["transcript.committed"], "what came before the loss is still read")
+        self.assertIsNotNone(err, "a lost engine raises")
+        self.assertEqual(err.code, "engine_lost")
+        self.assertTrue(err.retryable)
+        self.assertIsNone(reason)
+
+    def test_a_socket_closed_by_close_ends_quietly(self):
+        async def serve(ws):
+            await ws.send(json.dumps({"type": "session.ready", "sessionId": "s1"}))
+            await asyncio.sleep(1)
+
+        async def go():
+            async with websockets.serve(serve, "127.0.0.1", 0) as server:
+                port = server.sockets[0].getsockname()[1]
+                session = await RealtimeSession.connect("s1", f"ws://127.0.0.1:{port}/v1/realtime/sessions/t/socket")
+                await session.close()
+                return [ev async for ev in session]
+
+        self.assertEqual(run(go()), [])
 
 
 if __name__ == "__main__":

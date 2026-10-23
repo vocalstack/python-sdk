@@ -253,8 +253,13 @@ class RealtimeSession:
                 return
             try:
                 raw = await self._ws.recv()
-            except websockets.ConnectionClosed:
-                return
+            except websockets.ConnectionClosed as e:
+                if self._closed:
+                    return
+                # Closed under us before the session said how it ended: not
+                # a quiet end of the transcript, the engine was lost.
+                self._error = engine_lost(e.rcvd.code if e.rcvd else None)
+                raise self._error from e
             if isinstance(raw, bytes):
                 continue
             frame = parse_server_frame(raw)
@@ -279,6 +284,22 @@ class RealtimeSession:
 
     async def __aexit__(self, *exc: object) -> None:
         await self.close()
+
+
+def engine_lost(close_code: Optional[int] = None) -> VocalStackError:
+    """A ready socket that closed with neither ``session.done`` nor an
+    ``error`` frame, and not by ``close()``: the engine went away
+    mid-stream (its machine stopped or crashed) or the connection to it
+    dropped. What was committed before stays; nothing after it was
+    transcribed. Retryable: open a new realtime session to go on (there
+    is no resume)."""
+    how = f" (close {close_code})" if close_code else ""
+    return VocalStackError(
+        "engine_lost",
+        "The connection to the transcription engine closed before the realtime session "
+        f"finished{how}; open a new realtime session to continue.",
+        retryable=True,
+    )
 
 
 def _hand(on_frame: Optional[Callable[[Any], None]], frame: Any) -> None:

@@ -14,7 +14,7 @@ class _Base(BaseModel):
 
 Access = Literal["public", "private"]
 
-ErrorCode = Literal["invalid_audio", "invalid_options", "invalid_token", "capacity_exceeded", "slow_consumer", "engine_unavailable", "internal", "session_expired", "forbidden", "broadcast_archived", "not_found", "conflict", "invalid_state", "password_required", "rate_limited", "preview_pending", "language_unavailable", "suspended", "key_expired", "key_revoked", "key_from_browser", "insufficient_credit", "usage_cap_reached", "payment_method_required", "terms_acceptance_required", "payment_method_in_use", "billing_details_required", "promo_code_invalid", "auto_top_up_off", "range_too_long", "quota_exceeded", "idempotency_key_reused", "method_not_allowed", "payload_too_large", "unsupported_media_type", "invalid_body", "timeout", "unavailable"]
+ErrorCode = Literal["invalid_audio", "invalid_options", "invalid_token", "capacity_exceeded", "slow_consumer", "engine_unavailable", "internal", "session_expired", "engine_lost", "forbidden", "broadcast_archived", "not_found", "conflict", "invalid_state", "password_required", "rate_limited", "preview_pending", "language_unavailable", "suspended", "key_expired", "key_revoked", "key_from_browser", "insufficient_credit", "usage_cap_reached", "payment_method_required", "terms_acceptance_required", "payment_method_in_use", "billing_details_required", "promo_code_invalid", "auto_top_up_off", "range_too_long", "quota_exceeded", "idempotency_key_reused", "method_not_allowed", "payload_too_large", "unsupported_media_type", "invalid_body", "timeout", "unavailable"]
 
 AudioEncoding = Literal["pcm_f32le"]
 
