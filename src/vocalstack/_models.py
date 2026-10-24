@@ -38,6 +38,8 @@ LatencyMode = Literal["auto", "fast", "accuracy"]
 
 SpeakerLabels = Literal["auto", "on", "off"]
 
+ClientApp = Literal["mac_app"]
+
 ClientKind = Literal["dashboard", "chrome_extension", "mac_app", "obs_plugin", "sdk", "other"]
 
 Decoder = Literal["fast", "accuracy"]
@@ -714,6 +716,33 @@ class CheckoutView(_Base):
     plan_id: Optional[str] = Field(default=None, alias="planId")
     status: str
     url: Optional[str] = None
+
+
+class ClientMessages(_Base):
+    """Copy overrides; `null` keeps the app's own."""
+
+    deprecated: Optional[str] = None
+    unsupported: Optional[str] = None
+
+
+class ClientRelease(_Base):
+    """A build to update to."""
+
+    bytes: int
+    notes: Optional[str] = None
+    sha256: str
+    signature: str
+    url: str
+    version: str
+
+
+class ClientPolicy(_Base):
+    """An app's version policy."""
+
+    deprecated_below: Optional[str] = Field(default=None, alias="deprecatedBelow")
+    latest: Optional["ClientRelease"] = None
+    message: "ClientMessages"
+    unsupported_below: Optional[str] = Field(default=None, alias="unsupportedBelow")
 
 
 class CommittedSegment(_Base):

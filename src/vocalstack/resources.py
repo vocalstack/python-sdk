@@ -1005,3 +1005,7 @@ class Meta(_Group):
     async def openapi(self) -> Dict[str, Any]:
         """The OpenAPI document the models are generated from."""
         return await self._t.json("GET", "/v1/openapi.json")
+
+    async def client_policy(self, client: str) -> m.ClientPolicy:
+        """A VocalStack app's version policy: the newest build and which versions are deprecated or unsupported."""
+        return _one(m.ClientPolicy, await self._t.json("GET", f"/v1/clients/{_p(client)}"))
