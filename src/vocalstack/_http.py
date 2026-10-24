@@ -8,7 +8,7 @@ from typing import Any, Callable, Dict, Mapping, Optional, Union
 
 import httpx
 
-from .errors import from_envelope, from_oauth
+from .errors import VocalStackError, from_envelope, from_oauth
 
 DEFAULT_BASE_URL = "https://api.vocalstack.com"
 
@@ -120,16 +120,21 @@ class Transport:
             h["idempotency-key"] = idempotency_key
         attempt = 0
         while True:
-            resp = await self.http.request(
-                method,
-                self.url(path),
-                params=_clean(query),
-                json=json_body,
-                files=files,
-                data=data,
-                headers=h,
-                follow_redirects=False,
-            )
+            # No answer at all (offline, DNS, refused): a VocalStackError
+            # like any other, with no address in its message.
+            try:
+                resp = await self.http.request(
+                    method,
+                    self.url(path),
+                    params=_clean(query),
+                    json=json_body,
+                    files=files,
+                    data=data,
+                    headers=h,
+                    follow_redirects=False,
+                )
+            except httpx.TransportError as e:
+                raise VocalStackError("unavailable", "could not reach the VocalStack API", retryable=True) from e
             if resp.status_code < 400:
                 return resp
             body = None
@@ -152,7 +157,12 @@ class Transport:
         resp = await self.raw(method, path, **kw)
         if 300 <= resp.status_code < 400:
             return {"location": resp.headers.get("location")}
-        return resp.json() if resp.content else None
+        if not resp.content:
+            return None
+        try:
+            return resp.json()
+        except (json.JSONDecodeError, ValueError) as e:
+            raise VocalStackError("internal", "the API answered with a body that is not JSON", status=resp.status_code, headers=resp.headers) from e
 
     async def aclose(self) -> None:
         if self.own_http:
