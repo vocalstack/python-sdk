@@ -53,6 +53,17 @@ def upgrade_refused(status: int, body: Optional[bytes]) -> VocalStackError:
     return from_envelope(parsed, status)
 
 
+#: The relay's restart close (a draining relay, a blip of the proxy in front
+#: of it): the client reconnects with the same ``stream_url`` and the session
+#: goes on.  The only close the SDK reconnects on.
+RESTART_CLOSE = 1012
+#: Reconnects after a restart close, 1, 2, 4 s apart.
+RESTART_TRIES = 3
+#: What is sent while reconnecting is kept, up to this much (about a minute
+#: of 16 kHz float audio), and sent once the socket is back.
+MAX_PENDING_BYTES = 4 * 1024 * 1024
+
+
 class RealtimeSession:
     """Async-iterable stream of transcript events.
 
@@ -64,7 +75,13 @@ class RealtimeSession:
     """
 
     def __init__(
-        self, session_id: str, ws: ClientConnection, on_frame: Optional[Callable[[Any], None]] = None
+        self,
+        session_id: str,
+        ws: ClientConnection,
+        on_frame: Optional[Callable[[Any], None]] = None,
+        *,
+        stream_url: Optional[str] = None,
+        ready_deadline_s: float = DEFAULT_READY_DEADLINE_S,
     ) -> None:
         self.session_id = session_id
         self._ws = ws
@@ -73,6 +90,13 @@ class RealtimeSession:
         self.stats: Optional[SessionStats] = None
         self._error: Optional[VocalStackError] = None
         self._closed = False
+        # For a reconnect after the relay's restart close (``RESTART_CLOSE``).
+        self._stream_url = stream_url
+        self._ready_deadline_s = ready_deadline_s
+        self._reconnecting = False
+        self._reconnects = 0
+        self._pending: List[Union[str, bytes]] = []
+        self._pending_bytes = 0
 
 
     @classmethod
@@ -98,10 +122,23 @@ class RealtimeSession:
         ``session.loading`` heartbeats flow, expiry maps to
         ``engine_unavailable`` instead.
         """
+        ws = await cls._open_ready(stream_url, ready_deadline_s, on_frame)
+        return cls(session_id, ws, on_frame, stream_url=stream_url, ready_deadline_s=ready_deadline_s)
+
+    @staticmethod
+    async def _open_ready(
+        stream_url: str, ready_deadline_s: float, on_frame: Optional[Callable[[Any], None]]
+    ) -> ClientConnection:
+        """Open ``stream_url`` and wait for ``session.ready``: the socket, or
+        the error the connect is refused with."""
         try:
             # The upgrade waits in the proxy's queue while every engine is
             # busy: the ready deadline covers it, not websockets' own 10 s.
-            ws = await websockets.connect(stream_url, max_size=None, open_timeout=ready_deadline_s)
+            # A send on a closing socket waits for the close to finish
+            # (websockets' close_timeout, 10 s by default) before it says so:
+            # 2 s, so a relay's restart close is seen and reconnected on
+            # within seconds, not ten.
+            ws = await websockets.connect(stream_url, max_size=None, open_timeout=ready_deadline_s, close_timeout=2)
         except websockets.InvalidStatus as e:
             raise upgrade_refused(e.response.status_code, e.response.body) from e
         except TimeoutError as e:
@@ -139,7 +176,7 @@ class RealtimeSession:
                 continue
             _hand(on_frame, frame)
             if frame.type == "session.ready":
-                return cls(session_id, ws, on_frame)
+                return ws
             if frame.type == "error":
                 await ws.close()
                 raise VocalStackError(frame.code, frame.message, retryable=frame.retryable)
@@ -151,10 +188,47 @@ class RealtimeSession:
         Sends racing the end of the session are silently dropped — the
         event iterator is the authority on how the session ended.
         """
+        await self._send(bytes(pcm))
+
+    async def _send(self, data: Union[str, bytes]) -> None:
+        """Send now; while reconnecting after a restart close, keep it
+        (bounded) for the next socket."""
+        if not self._reconnecting:
+            try:
+                await self._ws.send(data)
+                return
+            except websockets.ConnectionClosed as e:
+                if self._closed or not _restart(e):
+                    return
+        if self._pending_bytes + len(data) <= MAX_PENDING_BYTES:
+            self._pending.append(data)
+            self._pending_bytes += len(data)
+
+    async def _reconnect(self) -> None:
+        """The relay restarting: open the same ``stream_url`` again (1, 2,
+        4 s apart), send what waited, and go on as the same session.  Out
+        of tries: ``engine_lost``."""
+        self._reconnecting = True
         try:
-            await self._ws.send(pcm)
-        except websockets.ConnectionClosed:
-            pass
+            while self._reconnects < RESTART_TRIES and not self._closed and self._stream_url:
+                await asyncio.sleep(2 ** self._reconnects)
+                self._reconnects += 1
+                try:
+                    ws = await self._open_ready(self._stream_url, self._ready_deadline_s, self._on_frame)
+                except VocalStackError as e:
+                    # A refusal that will not pass (a bad or used token) ends it now.
+                    if not e.retryable:
+                        raise
+                    continue
+                self._ws = ws
+                self._reconnecting = False
+                waiting, self._pending, self._pending_bytes = self._pending, [], 0
+                for d in waiting:
+                    await self._send(d)
+                return
+            raise engine_lost(RESTART_CLOSE)
+        finally:
+            self._reconnecting = False
 
     async def send_file(
         self,
@@ -182,10 +256,7 @@ class RealtimeSession:
     async def eof(self) -> None:
         """End of source: server flushes, emits final commits, then
         ``session.done`` — after which iteration completes."""
-        try:
-            await self._ws.send(json.dumps({"type": "eof"}))
-        except websockets.ConnectionClosed:
-            pass
+        await self._send(json.dumps({"type": "eof"}))
 
     async def update(
         self,
@@ -216,10 +287,7 @@ class RealtimeSession:
             frame["speakerLabels"] = speaker_labels
         if translate is not None:
             frame["translate"] = translate
-        try:
-            await self._ws.send(json.dumps(frame))
-        except websockets.ConnectionClosed:
-            pass
+        await self._send(json.dumps(frame))
 
     async def cancel(self) -> None:
         """Stop now, abandoning the rest of the audio.
@@ -230,10 +298,7 @@ class RealtimeSession:
         ``close()`` for a deliberate stop — it is a clean end that still
         reports stats.
         """
-        try:
-            await self._ws.send(json.dumps({"type": "cancel"}))
-        except websockets.ConnectionClosed:
-            pass
+        await self._send(json.dumps({"type": "cancel"}))
 
     async def close(self) -> None:
         """Hard-close (aborts the run server-side; no resume, rule 7).
@@ -256,6 +321,14 @@ class RealtimeSession:
             except websockets.ConnectionClosed as e:
                 if self._closed:
                     return
+                # The relay restarting: reconnect and go on (``RESTART_CLOSE``).
+                if _restart(e):
+                    try:
+                        await self._reconnect()
+                    except VocalStackError as err:
+                        self._error = err
+                        raise
+                    continue
                 # Closed under us before the session said how it ended: not
                 # a quiet end of the transcript, the engine was lost.
                 self._error = engine_lost(e.rcvd.code if e.rcvd else None)
@@ -286,13 +359,19 @@ class RealtimeSession:
         await self.close()
 
 
+def _restart(e: "websockets.ConnectionClosed") -> bool:
+    """The socket closed with the relay's restart close."""
+    return e.rcvd is not None and e.rcvd.code == RESTART_CLOSE
+
+
 def engine_lost(close_code: Optional[int] = None) -> VocalStackError:
     """A ready socket that closed with neither ``session.done`` nor an
     ``error`` frame, and not by ``close()``: the engine went away
     mid-stream (its machine stopped or crashed) or the connection to it
     dropped. What was committed before stays; nothing after it was
-    transcribed. Retryable: open a new realtime session to go on (there
-    is no resume)."""
+    transcribed. Retryable: open a new realtime session to go on. (The
+    relay's restart close, 1012, is not this: the session reconnects and
+    goes on, ``RESTART_CLOSE``.)"""
     how = f" (close {close_code})" if close_code else ""
     return VocalStackError(
         "engine_lost",
