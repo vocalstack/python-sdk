@@ -1730,6 +1730,7 @@ class TranscriptWords(_Base):
 
 class TranscriptAmended(_Base):
     fixes: Optional[List["Fix"]] = None
+    language: Optional[str] = None
     script_words: Optional[List[int]] = Field(default=None, alias="scriptWords")
     seq: int
     speaker: int
