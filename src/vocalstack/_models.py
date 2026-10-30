@@ -1047,8 +1047,9 @@ class LedgerPage(_Base):
 
 
 class PageMedia(_Base):
-    """A recording found on a page."""
+    """A recording or a live stream found on a page."""
 
+    kind: LinkKind
     title: Optional[str] = None
     url: str
 
