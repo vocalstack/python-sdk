@@ -742,6 +742,14 @@ class Voices(_Group):
         data = await self._t.json("POST", "/v1/voices/from-speaker", json_body=body, idempotency_key=idempotency_key)
         return _one(m.Voice, data)
 
+    async def set_consent(self, id: str, consent: str, *, name: Optional[str] = None) -> m.Voice:
+        """Record whether the speaker agreed to their clone: ``granted`` (with an
+        optional name, which also names the speaker in its recording) makes it
+        speak; ``refused`` deletes its audio and voice.  Automatic clones start
+        ``pending``."""
+        body = _body(m.SetConsent, {"consent": consent, "name": name})
+        return _one(m.Voice, await self._t.json("POST", f"/v1/voices/{_p(id)}/consent", json_body=body))
+
     async def update(self, id: str, **fields: Any) -> m.Voice:
         body = _body(m.PatchVoice, fields)
         return _one(m.Voice, await self._t.json("PATCH", f"/v1/voices/{_p(id)}", json_body=body))

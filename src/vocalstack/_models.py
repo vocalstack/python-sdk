@@ -44,6 +44,8 @@ ClientKind = Literal["dashboard", "chrome_extension", "mac_app", "obs_plugin", "
 
 Decoder = Literal["fast", "accuracy"]
 
+Consent = Literal["pending", "granted", "refused"]
+
 NotVoicedReason = Literal["rewrite"]
 
 DoneReason = Literal["eof", "max_duration", "cancelled"]
@@ -1438,6 +1440,14 @@ class SessionOptions(_Base):
     voice_cast: Optional[bool] = Field(default=None, alias="voiceCast")
 
 
+class SetConsent(_Base):
+    """`POST /v1/voices/:id/consent`: the owner records whether the speaker
+agreed to their clone."""
+
+    consent: Consent
+    name: Optional[str] = None
+
+
 class SetInterval(_Base):
     """`POST /v1/billing/subscription/interval`."""
 
@@ -1643,7 +1653,9 @@ class UsageReport(_Base):
 
 
 class Voice(_Base):
+    auto: Optional[bool] = None
     color: Optional[str] = None
+    consent: Consent
     consent_at: Optional[str] = Field(default=None, alias="consentAt")
     created_at: str = Field(alias="createdAt")
     draft: bool
@@ -1654,7 +1666,9 @@ class Voice(_Base):
     name: str
     preview_url: Optional[str] = Field(default=None, alias="previewUrl")
     progress: int
+    recording_id: Optional[str] = Field(default=None, alias="recordingId")
     sample_s: float = Field(alias="sampleS")
+    speaker: Optional[int] = None
     speech_s: Optional[float] = Field(default=None, alias="speechS")
     state: str
     updated_at: str = Field(alias="updatedAt")
