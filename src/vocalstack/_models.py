@@ -385,7 +385,7 @@ stream, an RTMP encoder), which may feed broadcasts (`broadcasts`)."""
     lifecycle: Lifecycle
     live: Optional[bool] = None
     name: str
-    origin: Literal["dashboard", "api", "extension", "desktop_app", "obs", "wordpress", "payload", "strapi", "contentful", "mcp", "batch_api", "broadcast", "unknown"]
+    origin: Literal["dashboard", "api", "extension", "desktop_app", "obs", "wordpress", "payload", "strapi", "sanity", "contentful", "mcp", "batch_api", "broadcast", "unknown"]
     owner_principal_id: str = Field(alias="ownerPrincipalId")
     purge_after: Optional[str] = Field(default=None, alias="purgeAfter")
     recording_count: int = Field(alias="recordingCount")
