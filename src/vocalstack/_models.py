@@ -357,6 +357,14 @@ design's settings sheet): what a recording made in it starts with."""
     voice_by_lang: Optional[Dict[str, str]] = Field(default=None, alias="voiceByLang")
 
 
+class TagRef(_Base):
+    """A tag as a transcription lists it."""
+
+    color: Literal["coral", "amber", "lime", "green", "teal", "blue", "violet", "pink"]
+    id: str
+    name: str
+
+
 class Transcription(_Base):
     """A transcription: a file, a link (with its `transcription` job), or
 something captured as it is spoken (`live: true`: a microphone, a
@@ -377,12 +385,14 @@ stream, an RTMP encoder), which may feed broadcasts (`broadcasts`)."""
     lifecycle: Lifecycle
     live: Optional[bool] = None
     name: str
+    origin: Literal["dashboard", "api", "extension", "desktop_app", "obs", "wordpress", "payload", "strapi", "contentful", "mcp", "batch_api", "broadcast", "unknown"]
     owner_principal_id: str = Field(alias="ownerPrincipalId")
     purge_after: Optional[str] = Field(default=None, alias="purgeAfter")
     recording_count: int = Field(alias="recordingCount")
     settings: "Settings"
     share_url: str = Field(alias="shareUrl")
     source: "CaptureSource"
+    tags: Optional[List["TagRef"]] = None
     updated_at: str = Field(alias="updatedAt")
 
 
@@ -877,6 +887,11 @@ class CreateShareLink(_Base):
     allow_export: Optional[bool] = Field(default=None, alias="allowExport")
     allow_translate: Optional[bool] = Field(default=None, alias="allowTranslate")
     label: str
+
+
+class CreateTag(_Base):
+    color: Optional[Literal["coral", "amber", "lime", "green", "teal", "blue", "violet", "pink"]] = None
+    name: str
 
 
 class SettingsPatch(_Base):
@@ -1494,6 +1509,24 @@ class SummaryStatus(_Base):
     title: Optional[str] = None
 
 
+class Tag(_Base):
+    color: Literal["coral", "amber", "lime", "green", "teal", "blue", "violet", "pink"]
+    created_at: str = Field(alias="createdAt")
+    id: str
+    name: str
+
+
+class TagList(_Base):
+    tags: List["Tag"]
+
+
+class TagTranscriptions(_Base):
+    """Transcriptions to put the tag on and to take it off, by id."""
+
+    add: Optional[List[str]] = None
+    remove: Optional[List[str]] = None
+
+
 class TranscriptSnapshot(_Base):
     lang: Optional[str] = None
     last_seq: int = Field(alias="lastSeq")
@@ -1528,6 +1561,11 @@ class UpdateShareLink(_Base):
     allow_export: Optional[bool] = Field(default=None, alias="allowExport")
     allow_translate: Optional[bool] = Field(default=None, alias="allowTranslate")
     label: Optional[str] = None
+
+
+class UpdateTag(_Base):
+    color: Optional[Literal["coral", "amber", "lime", "green", "teal", "blue", "violet", "pink"]] = None
+    name: Optional[str] = None
 
 
 class UpdateTranscription(_Base):

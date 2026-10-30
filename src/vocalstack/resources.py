@@ -672,6 +672,31 @@ class ShareLinks(_Group):
         return _one(m.ShareLink, await self._t.json("DELETE", f"/v1/share-links/{_p(id)}"))
 
 
+class Tags(_Group):
+    """``vs.tags``: the account's own labels for its transcriptions; each
+    transcription lists its own in ``tags``."""
+
+    async def list(self) -> List[m.Tag]:
+        return _many(m.Tag, await self._t.json("GET", "/v1/tags"), "tags")
+
+    async def create(self, name: str, **fields: Any) -> m.Tag:
+        body = _body(m.CreateTag, {"name": name, **fields})
+        return _one(m.Tag, await self._t.json("POST", "/v1/tags", json_body=body))
+
+    async def update(self, id: str, **fields: Any) -> m.Tag:
+        body = _body(m.UpdateTag, fields)
+        return _one(m.Tag, await self._t.json("PATCH", f"/v1/tags/{_p(id)}", json_body=body))
+
+    async def delete(self, id: str) -> None:
+        """Delete a tag: it comes off every transcription it is on."""
+        await self._t.json("DELETE", f"/v1/tags/{_p(id)}")
+
+    async def tag_transcriptions(self, id: str, *, add: Optional[List[str]] = None, remove: Optional[List[str]] = None) -> m.Tag:
+        """Put the tag on the transcriptions in ``add`` and take it off those in ``remove``."""
+        body = _body(m.TagTranscriptions, {"add": add or [], "remove": remove or []})
+        return _one(m.Tag, await self._t.json("POST", f"/v1/tags/{_p(id)}/transcriptions", json_body=body))
+
+
 class Voices(_Group):
     """``vs.voices``: the account's cloned voices, and what a language offers."""
 

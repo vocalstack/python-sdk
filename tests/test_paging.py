@@ -31,7 +31,7 @@ def client(pages):
 def tx(id):
     return {
         "id": id, "code": "tx-1", "name": id, "kind": "transcription", "source": {"kind": "mic"}, "lifecycle": "active",
-        "ownerPrincipalId": "p", "shareUrl": "", "settings": {}, "recordingCount": 0, "createdAt": "2026-10-12T00:00:00Z",
+        "ownerPrincipalId": "p", "origin": "api", "shareUrl": "", "settings": {}, "recordingCount": 0, "createdAt": "2026-10-12T00:00:00Z",
         "updatedAt": "2026-10-12T00:00:00Z",
     }
 

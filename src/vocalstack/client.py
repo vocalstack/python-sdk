@@ -42,6 +42,7 @@ from .resources import (
     Rtmp,
     Search,
     ShareLinks,
+    Tags,
     Transcriptions,
     Voices,
 )
@@ -88,6 +89,7 @@ class VocalStack:
         self.jobs = Jobs(t)
         self.corrections = Corrections(t)
         self.share_links = ShareLinks(t)
+        self.tags = Tags(t)
         self.voices = Voices(t)
         self.search = Search(t)
         self.me = Me(t)
