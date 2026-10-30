@@ -60,6 +60,8 @@ LanguageStatusState = Literal["matches", "mismatch", "unknown", "change_unsuppor
 
 LinkKind = Literal["live", "file", "unknown"]
 
+ProbeReason = Literal["web_page", "site_not_fetched", "meeting", "not_found", "unreachable", "forbidden", "not_media", "copy_protected", "too_long", "unknown"]
+
 LoadingStage = Literal["download", "model"]
 
 RecordingKind = Literal["live", "upload"]
@@ -1056,6 +1058,8 @@ class LinkProbe(_Base):
     media: Optional[List["PageMedia"]] = None
     ok: bool
     problem: Optional[str] = None
+    reason: Optional[ProbeReason] = None
+    site_name: Optional[str] = Field(default=None, alias="siteName")
     source: str
 
 
