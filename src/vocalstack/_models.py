@@ -1493,6 +1493,7 @@ class SpeakerView(_Base):
     identified_confidence: Optional[float] = Field(default=None, alias="identifiedConfidence")
     name: str
     speaker: int
+    speech_s: Optional[float] = Field(default=None, alias="speechS")
     voice_color: Optional[str] = Field(default=None, alias="voiceColor")
     voice_id: Optional[str] = Field(default=None, alias="voiceId")
 
@@ -1556,6 +1557,7 @@ class TranscriptSnapshot(_Base):
     speaker_labels: Optional[SpeakerLabels] = Field(default=None, alias="speakerLabels")
     speakers: List["SpeakerView"]
     state: RecordingState
+    translation_pending: Optional[bool] = Field(default=None, alias="translationPending")
 
 
 class TranscriptionPage(_Base):
