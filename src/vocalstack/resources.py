@@ -527,7 +527,7 @@ class Recordings(_Group):
 
     async def voice_clip(self, id: str, sentence: int, lang: str, *, format: Optional[str] = None) -> bytes:
         """One sentence spoken in ``lang``: ``sentence`` is a transcript sentence's
-        ``id``, not a segment's position.  In the recording's default reading: each
+        ``sentenceId``, not a segment's position.  In the recording's default reading: each
         speaker in their granted clone, else a stock voice of their gender."""
         resp = await self._t.raw(
             "GET", self._path(id, f"/voice/{sentence}"), headers={"accept": "*/*"}, query={"lang": lang, "format": format}
