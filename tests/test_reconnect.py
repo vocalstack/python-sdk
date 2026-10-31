@@ -70,7 +70,6 @@ class RestartClose(unittest.TestCase):
                 reader = asyncio.create_task(collect(session))
                 await session.send_audio(b"\0" * 3200)
                 await asyncio.sleep(0.2)
-                # Sent while it reconnects: kept, and sent on the next socket.
                 await session.send_audio(b"\0" * 1600)
                 await session.eof()
                 got, err = await asyncio.wait_for(reader, 20)

@@ -91,7 +91,6 @@ class EngineLost(unittest.TestCase):
         async def serve(ws):
             await ws.send(json.dumps({"type": "session.ready", "sessionId": "s1"}))
             await ws.send(json.dumps({"type": "transcript.committed", "segment": {"seq": 0, "start": 0, "end": 1, "text": "before the loss", "speaker": 0, "words": []}}))
-            # The engine's machine is gone: the connection just ends.
             await asyncio.sleep(0.02)
             ws.transport.abort()
 

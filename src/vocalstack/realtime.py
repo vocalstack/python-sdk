@@ -53,14 +53,8 @@ def upgrade_refused(status: int, body: Optional[bytes]) -> VocalStackError:
     return from_envelope(parsed, status)
 
 
-#: The relay's restart close (a draining relay, a blip of the proxy in front
-#: of it): the client reconnects with the same ``stream_url`` and the session
-#: goes on.  The only close the SDK reconnects on.
 RESTART_CLOSE = 1012
-#: Reconnects after a restart close, 1, 2, 4 s apart.
 RESTART_TRIES = 3
-#: What is sent while reconnecting is kept, up to this much (about a minute
-#: of 16 kHz float audio), and sent once the socket is back.
 MAX_PENDING_BYTES = 4 * 1024 * 1024
 
 
@@ -90,7 +84,6 @@ class RealtimeSession:
         self.stats: Optional[SessionStats] = None
         self._error: Optional[VocalStackError] = None
         self._closed = False
-        # For a reconnect after the relay's restart close (``RESTART_CLOSE``).
         self._stream_url = stream_url
         self._ready_deadline_s = ready_deadline_s
         self._reconnecting = False
@@ -132,12 +125,6 @@ class RealtimeSession:
         """Open ``stream_url`` and wait for ``session.ready``: the socket, or
         the error the connect is refused with."""
         try:
-            # The upgrade waits in the proxy's queue while every engine is
-            # busy: the ready deadline covers it, not websockets' own 10 s.
-            # A send on a closing socket waits for the close to finish
-            # (websockets' close_timeout, 10 s by default) before it says so:
-            # 2 s, so a relay's restart close is seen and reconnected on
-            # within seconds, not ten.
             ws = await websockets.connect(stream_url, max_size=None, open_timeout=ready_deadline_s, close_timeout=2)
         except websockets.InvalidStatus as e:
             raise upgrade_refused(e.response.status_code, e.response.body) from e
@@ -216,7 +203,6 @@ class RealtimeSession:
                 try:
                     ws = await self._open_ready(self._stream_url, self._ready_deadline_s, self._on_frame)
                 except VocalStackError as e:
-                    # A refusal that will not pass (a bad or used token) ends it now.
                     if not e.retryable:
                         raise
                     continue
@@ -321,7 +307,6 @@ class RealtimeSession:
             except websockets.ConnectionClosed as e:
                 if self._closed:
                     return
-                # The relay restarting: reconnect and go on (``RESTART_CLOSE``).
                 if _restart(e):
                     try:
                         await self._reconnect()
@@ -329,8 +314,6 @@ class RealtimeSession:
                         self._error = err
                         raise
                     continue
-                # Closed under us before the session said how it ended: not
-                # a quiet end of the transcript, the engine was lost.
                 self._error = engine_lost(e.rcvd.code if e.rcvd else None)
                 raise self._error from e
             if isinstance(raw, bytes):

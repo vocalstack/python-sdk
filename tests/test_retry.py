@@ -67,7 +67,7 @@ class Retries(unittest.TestCase):
         try:
             run(vs.broadcasts.create(name="x", idempotency_key="k1"))
         except Exception:
-            pass  # the canned answer may not be a whole Broadcast; the requests are what is checked
+            pass
         self.assertEqual(len(calls), 2)
         self.assertEqual(calls[1].headers["idempotency-key"], "k1")
 

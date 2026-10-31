@@ -30,7 +30,6 @@ def listener_query(listener_token: Optional[str], share_code: Optional[str]) -> 
     return {"listenerToken": listener_token, "shareCode": share_code}
 
 
-#: The wait before retrying ``503 unavailable`` when it names none.
 UNAVAILABLE_WAIT_S = 2.0
 
 
@@ -120,8 +119,6 @@ class Transport:
             h["idempotency-key"] = idempotency_key
         attempt = 0
         while True:
-            # No answer at all (offline, DNS, refused): a VocalStackError
-            # like any other, with no address in its message.
             try:
                 resp = await self.http.request(
                     method,

@@ -21,7 +21,6 @@ if TYPE_CHECKING:
 
 T = TypeVar("T", bound=BaseModel)
 
-#: A file to upload: a path, bytes, or an open binary file.
 Upload = Union[str, "os.PathLike[str]", bytes, bytearray, IO[bytes]]
 
 
@@ -78,7 +77,6 @@ class _ParentResource(_Group):
     """What broadcasts and transcriptions share: recordings, share links."""
 
     _base = ""
-    #: The list's key: what it holds (``broadcasts`` or ``transcriptions``).
     _key = ""
     _model: Type[Union[m.Broadcast, m.Transcription]] = m.Broadcast
     _update: Type[Union[m.UpdateBroadcast, m.UpdateTranscription]] = m.UpdateBroadcast
@@ -369,7 +367,6 @@ class Batches(_Group):
             batch = await self.get(id)
             if on_progress is not None:
                 on_progress(batch)
-            # Closed: every file over (a stopped batch's running file too).
             if batch.state in ("done", "stopped") and batch.finished_at:
                 return batch
             if batch.state == "open":
@@ -727,7 +724,6 @@ class Voices(_Group):
             m.CreateVoice,
             {"name": name, "sample_url": sample_url, "gender": gender, "color": color, "draft": draft or None, "consent": not draft},
         )
-        # Multipart even without a sample: the meta part rides as a field.
         files: Dict[str, Any] = {"meta": (None, json.dumps(meta), "application/json")}
         if sample is not None:
             files["sample"] = await asyncio.to_thread(_file_part, sample, file_name, "sample.webm")

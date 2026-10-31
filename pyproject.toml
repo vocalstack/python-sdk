@@ -22,11 +22,8 @@ Homepage = "https://vocalstack.com"
 [tool.hatch.build.targets.wheel]
 packages = ["src/vocalstack"]
 
-# The Agent Skill ships inside the package (site-packages/vocalstack/SKILL.md)
-# so an agent can find it next to the code.
 [tool.hatch.build.targets.wheel.force-include]
 "SKILL.md" = "vocalstack/SKILL.md"
 
-# An explicit list: nothing else from the repository goes into the sdist.
 [tool.hatch.build.targets.sdist]
 only-include = ["src/vocalstack", "LICENSE", "README.md", "SKILL.md", "skills", "pyproject.toml"]

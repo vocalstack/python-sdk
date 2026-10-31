@@ -209,7 +209,7 @@ class AutoTopUpSettings(_Base):
 class SettingLowering(_Base):
     """A lowering of a billing setting that changes the account's terms (the
 days data is kept after a downgrade, the auto top-up daily limit),
-told with at least 30 days' notice (docs/billing-price-changes.md §6)."""
+told with at least 30 days' notice."""
 
     after_date: Optional[str] = Field(default=None, alias="afterDate")
     applies_at: str = Field(alias="appliesAt")
