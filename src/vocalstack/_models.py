@@ -357,6 +357,8 @@ design's settings sheet): what a recording made in it starts with."""
     title: Optional[bool] = None
     voice: Optional[bool] = None
     voice_by_lang: Optional[Dict[str, str]] = Field(default=None, alias="voiceByLang")
+    voice_cloning: Optional[bool] = Field(default=None, alias="voiceCloning")
+    voice_cloning_consent: Optional[bool] = Field(default=None, alias="voiceCloningConsent")
 
 
 class TagRef(_Base):
@@ -400,11 +402,15 @@ stream, an RTMP encoder), which may feed broadcasts (`broadcasts`)."""
 
 class BatchSettings(_Base):
     """What every file of a batch runs with.  Summary, title, voices and the
-share link are never made for a batch file, so they are not here."""
+share link are never made for a batch file, so they are not here.
+Voice cloning is (design 120: the New transcription form asks it for
+every file it starts, one file or several)."""
 
     latency_mode: Optional[LatencyMode] = Field(default=None, alias="latencyMode")
     speaker_labels: Optional[SpeakerLabels] = Field(default=None, alias="speakerLabels")
     spoken_language: Optional[str] = Field(default=None, alias="spokenLanguage")
+    voice_cloning: Optional[bool] = Field(default=None, alias="voiceCloning")
+    voice_cloning_consent: Optional[bool] = Field(default=None, alias="voiceCloningConsent")
 
 
 class Batch(_Base):
@@ -912,6 +918,8 @@ class SettingsPatch(_Base):
     title: Optional[bool] = None
     voice: Optional[bool] = None
     voice_by_lang: Optional[Dict[str, str]] = Field(default=None, alias="voiceByLang")
+    voice_cloning: Optional[bool] = Field(default=None, alias="voiceCloning")
+    voice_cloning_consent: Optional[bool] = Field(default=None, alias="voiceCloningConsent")
 
 
 class CreateTranscription(_Base):
@@ -1438,6 +1446,7 @@ class SessionOptions(_Base):
     voice: Optional[List[str]] = None
     voice_by_lang: Optional[Dict[str, str]] = Field(default=None, alias="voiceByLang")
     voice_cast: Optional[bool] = Field(default=None, alias="voiceCast")
+    voice_cloning: Optional[bool] = Field(default=None, alias="voiceCloning")
 
 
 class SetConsent(_Base):
@@ -1677,7 +1686,9 @@ class Voice(_Base):
 
 class VoiceOption(_Base):
     accent: Optional[str] = None
+    auto: Optional[bool] = None
     cloned: bool
+    consent: Optional[Consent] = None
     default: bool
     gender: Optional[str] = None
     id: str
@@ -1686,6 +1697,7 @@ class VoiceOption(_Base):
     preview_url: Optional[str] = Field(default=None, alias="previewUrl")
     quality: int
     ready: Optional[bool] = None
+    speaker: Optional[int] = None
     speakers: Optional[int] = None
 
 
