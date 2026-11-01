@@ -953,6 +953,7 @@ class SampleSpan(_Base):
 class CreateVoiceFromSpeaker(_Base):
     color: Optional[str] = None
     consent: Optional[bool] = None
+    draft: Optional[bool] = None
     name: str
     recording_id: str = Field(alias="recordingId")
     spans: Optional[List["SampleSpan"]] = None
