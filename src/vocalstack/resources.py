@@ -110,6 +110,15 @@ class _ParentResource(_Group):
         """Delete an archived one and everything in it, for good."""
         await self._t.json("POST", self._path(id, "/purge"))
 
+    async def archive_many(self, ids: List[str]) -> m.ManyResult:
+        return _one(m.ManyResult, await self._t.json("POST", f"{self._base}/archive", json_body={"ids": ids}))
+
+    async def restore_many(self, ids: List[str]) -> m.ManyResult:
+        return _one(m.ManyResult, await self._t.json("POST", f"{self._base}/restore", json_body={"ids": ids}))
+
+    async def purge_many(self, ids: List[str]) -> m.ManyResult:
+        return _one(m.ManyResult, await self._t.json("POST", f"{self._base}/purge", json_body={"ids": ids}))
+
     async def list_recordings(self, id: str, lifecycle: str = "active") -> List[m.Recording]:
         """Every recording, newest first (every page of ``list_recordings_page``)."""
         items = await _all_pages(
@@ -441,6 +450,15 @@ class Recordings(_Group):
     async def purge(self, id: str) -> None:
         await self._t.json("POST", self._path(id, "/purge"))
 
+    async def archive_many(self, ids: List[str]) -> m.ManyResult:
+        return _one(m.ManyResult, await self._t.json("POST", "/v1/recordings/archive", json_body={"ids": ids}))
+
+    async def restore_many(self, ids: List[str]) -> m.ManyResult:
+        return _one(m.ManyResult, await self._t.json("POST", "/v1/recordings/restore", json_body={"ids": ids}))
+
+    async def purge_many(self, ids: List[str]) -> m.ManyResult:
+        return _one(m.ManyResult, await self._t.json("POST", "/v1/recordings/purge", json_body={"ids": ids}))
+
     async def transcript(
         self,
         id: str,
@@ -700,11 +718,27 @@ class Tags(_Group):
 class Voices(_Group):
     """``vs.voices``: the account's cloned voices, and what a language offers."""
 
-    async def list(self) -> List[m.Voice]:
-        return _many(m.Voice, await self._t.json("GET", "/v1/voices"), "voices")
+    async def list(self, *, lifecycle: Optional[str] = None) -> List[m.Voice]:
+        return _many(m.Voice, await self._t.json("GET", "/v1/voices", query={"lifecycle": lifecycle}), "voices")
 
     async def get(self, id: str) -> m.Voice:
         return _one(m.Voice, await self._t.json("GET", f"/v1/voices/{_p(id)}"))
+
+    async def archive(self, id: str) -> m.Voice:
+        """Put a voice away: it stops speaking and is unlinked from its speakers."""
+        return _one(m.Voice, await self._t.json("POST", f"/v1/voices/{_p(id)}/archive"))
+
+    async def restore(self, id: str) -> m.Voice:
+        return _one(m.Voice, await self._t.json("POST", f"/v1/voices/{_p(id)}/restore"))
+
+    async def archive_many(self, ids: List[str]) -> m.ManyResult:
+        return _one(m.ManyResult, await self._t.json("POST", "/v1/voices/archive", json_body={"ids": ids}))
+
+    async def restore_many(self, ids: List[str]) -> m.ManyResult:
+        return _one(m.ManyResult, await self._t.json("POST", "/v1/voices/restore", json_body={"ids": ids}))
+
+    async def delete_many(self, ids: List[str]) -> m.ManyResult:
+        return _one(m.ManyResult, await self._t.json("POST", "/v1/voices/delete", json_body={"ids": ids}))
 
     async def create(
         self,

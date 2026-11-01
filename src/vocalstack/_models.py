@@ -945,11 +945,17 @@ class CreateVoice(_Base):
     sample_url: Optional[str] = Field(default=None, alias="sampleUrl")
 
 
+class SampleSpan(_Base):
+    end: float
+    start: float
+
+
 class CreateVoiceFromSpeaker(_Base):
     color: Optional[str] = None
     consent: Optional[bool] = None
     name: str
     recording_id: str = Field(alias="recordingId")
+    spans: Optional[List["SampleSpan"]] = None
     speaker: int
 
 
@@ -1100,6 +1106,21 @@ class LowBalanceAlertSettings(_Base):
 
     enabled: bool
     threshold: Optional[float] = None
+
+
+class ManyFailure(_Base):
+    code: ErrorCode
+    id: str
+    message: str
+
+
+class ManyIds(_Base):
+    ids: List[str]
+
+
+class ManyResult(_Base):
+    done: List[str]
+    failed: List["ManyFailure"]
 
 
 class MediaSummary(_Base):
@@ -1664,6 +1685,7 @@ class UsageReport(_Base):
 
 
 class Voice(_Base):
+    archived_at: Optional[str] = Field(default=None, alias="archivedAt")
     auto: Optional[bool] = None
     color: Optional[str] = None
     consent: Consent
