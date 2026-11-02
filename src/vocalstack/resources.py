@@ -932,7 +932,7 @@ class Billing(_Group):
 
     async def get_checkout(self, id: str) -> m.CheckoutView:
         """A checkout's status (by its id or the provider's)."""
-        return _one(m.CheckoutView, await self._t.json("GET", f"/v1/billing/checkouts/{id}"))
+        return _one(m.CheckoutView, await self._t.json("GET", f"/v1/billing/checkouts/{_p(id)}"))
 
     async def cancel_subscription(self) -> m.SubscriptionView:
         """Cancel the subscription at the end of its period."""
@@ -1003,7 +1003,7 @@ class Billing(_Group):
 
     async def payment_document(self, id: str) -> m.PaymentDocument:
         """A payment's invoice or receipt: ``url``, or ``pending`` while the provider makes it."""
-        return _one(m.PaymentDocument, await self._t.json("GET", f"/v1/billing/payments/{id}/document"))
+        return _one(m.PaymentDocument, await self._t.json("GET", f"/v1/billing/payments/{_p(id)}/document"))
 
     async def payment_methods(self) -> m.PaymentMethodList:
         """The saved payment methods."""
@@ -1011,7 +1011,7 @@ class Billing(_Group):
 
     async def delete_payment_method(self, id: str) -> None:
         """Remove a saved payment method."""
-        await self._t.json("DELETE", f"/v1/billing/payment-methods/{id}")
+        await self._t.json("DELETE", f"/v1/billing/payment-methods/{_p(id)}")
 
     async def manage_payment_methods(self) -> m.PortalLink:
         """A link to the provider's portal to add a card or choose the default."""

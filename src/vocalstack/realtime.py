@@ -422,12 +422,12 @@ class Realtime:
         self._t = t
         self._ready_deadline_s = ready_deadline_s
 
-    async def create_session(self, **options: Any) -> CreateSessionResponse:
+    async def create_session(self, *, idempotency_key: Optional[str] = None, **options: Any) -> CreateSessionResponse:
         """``POST /v1/realtime/sessions``: validate the options, get a signed
         ``stream_url``. Keyword args mirror SessionOptions (``spoken_language``,
         ``speaker_labels``, ``latency_mode``, ``events``, ``input``, ...)."""
         body = SessionOptions.model_validate(options).model_dump(by_alias=True, exclude_none=True, mode="json")
-        data = await self._t.json("POST", "/v1/realtime/sessions", json_body=body)
+        data = await self._t.json("POST", "/v1/realtime/sessions", json_body=body, idempotency_key=idempotency_key)
         return CreateSessionResponse.model_validate(data)
 
     async def connect(
