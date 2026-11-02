@@ -954,6 +954,7 @@ class CreateVoiceFromSpeaker(_Base):
     color: Optional[str] = None
     consent: Optional[bool] = None
     draft: Optional[bool] = None
+    library: Optional[bool] = None
     name: str
     recording_id: str = Field(alias="recordingId")
     spans: Optional[List["SampleSpan"]] = None
@@ -1143,6 +1144,7 @@ class PatchVoice(_Base):
     draft: Optional[bool] = None
     enabled: Optional[bool] = None
     gender: Optional[str] = None
+    library: Optional[bool] = None
     name: Optional[str] = None
 
 
@@ -1697,6 +1699,7 @@ class Voice(_Base):
     error: Optional[str] = None
     gender: Optional[str] = None
     id: str
+    library: Optional[bool] = None
     name: str
     preview_url: Optional[str] = Field(default=None, alias="previewUrl")
     progress: int
@@ -1718,6 +1721,7 @@ class VoiceOption(_Base):
     gender: Optional[str] = None
     id: str
     lag_s: Optional[float] = Field(default=None, alias="lagS")
+    library: Optional[bool] = None
     name: str
     preview_url: Optional[str] = Field(default=None, alias="previewUrl")
     quality: int

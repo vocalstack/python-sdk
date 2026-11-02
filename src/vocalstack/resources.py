@@ -765,12 +765,13 @@ class Voices(_Group):
         return _one(m.Voice, data)
 
     async def create_from_speaker(
-        self, *, recording_id: str, speaker: int, name: str, color: Optional[str] = None, idempotency_key: Optional[str] = None
+        self, *, recording_id: str, speaker: int, name: str, color: Optional[str] = None, library: Optional[bool] = None, idempotency_key: Optional[str] = None
     ) -> m.Voice:
-        """Build a voice from one speaker of a recording (asserts permission)."""
+        """Build a voice from one speaker of a recording (asserts permission).
+        ``library=False`` keeps it with that recording only."""
         body = _body(
             m.CreateVoiceFromSpeaker,
-            {"recording_id": recording_id, "speaker": speaker, "name": name, "color": color, "consent": True},
+            {"recording_id": recording_id, "speaker": speaker, "name": name, "color": color, "library": library, "consent": True},
         )
         data = await self._t.json("POST", "/v1/voices/from-speaker", json_body=body, idempotency_key=idempotency_key)
         return _one(m.Voice, data)
