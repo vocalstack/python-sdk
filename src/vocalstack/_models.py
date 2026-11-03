@@ -1617,6 +1617,7 @@ class TranscriptionPage(_Base):
     """`GET /v1/transcriptions`: one page, newest first."""
 
     next_cursor: Optional[str] = Field(default=None, alias="nextCursor")
+    total: Optional[int] = None
     transcriptions: List["Transcription"]
 
 
