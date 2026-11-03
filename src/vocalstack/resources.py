@@ -205,12 +205,13 @@ class Transcriptions(_ParentResource):
     _update = m.UpdateTranscription
 
     async def list_page(
-        self, *, lifecycle: str = "active", cursor: Optional[str] = None, limit: Optional[int] = None
+        self, *, lifecycle: str = "active", cursor: Optional[str] = None, limit: Optional[int] = None, site: Optional[str] = None
     ) -> m.TranscriptionPage:
         """One page of transcriptions, newest first (``limit`` 1 to 200, 100
         by default); ``cursor`` is the previous page's ``next_cursor``, and
-        the last page has none."""
-        data = await self._t.json("GET", self._base, query={"lifecycle": lifecycle, "cursor": cursor, "limit": limit})
+        the last page has none. ``site`` (``youtube``, ``vimeo``…) keeps only
+        those made from a link to that site."""
+        data = await self._t.json("GET", self._base, query={"lifecycle": lifecycle, "cursor": cursor, "limit": limit, "site": site})
         return _one(m.TranscriptionPage, data)
 
     async def upload_recording(
@@ -262,6 +263,12 @@ class Transcriptions(_ParentResource):
         body = _body(m.CreateLiveTranscription, fields)
         data = await self._t.json("POST", f"{self._base}/live", json_body=body, idempotency_key=idempotency_key)
         return _one(m.Transcription, data)
+
+    async def lookup(self, url: str) -> Optional[m.Transcription]:
+        """The caller's newest active transcription of ``url`` (same YouTube video, or the same link), or None."""
+        data = await self._t.json("GET", f"{self._base}/lookup", query={"url": url})
+        t = (data or {}).get("transcription")
+        return None if t is None else _one(m.Transcription, t)
 
     async def probe(self, url: str) -> m.LinkProbe:
         """Whether a link is live (a live transcription) or a file."""
@@ -532,21 +539,54 @@ class Recordings(_Group):
         resp = await self._t.raw("GET", self._path(id, "/audio/clip"), headers={"accept": "*/*"}, query=query)
         return resp.content
 
-    async def voice(self, id: str, lang: Optional[str] = None) -> List[m.VoiceTrack]:
-        data = await self._t.json("GET", self._path(id, "/voice"), query={"lang": lang})
+    async def voice(
+        self, id: str, lang: Optional[str] = None, *, listener_token: Optional[str] = None, share_code: Optional[str] = None
+    ) -> List[m.VoiceTrack]:
+        query = {**listener_query(listener_token, share_code), "lang": lang}
+        data = await self._t.json("GET", self._path(id, "/voice"), query=query)
         return [m.VoiceTrack.model_validate(x) for x in data or []]
 
-    async def render_voice(self, id: str, langs: List[str], *, idempotency_key: Optional[str] = None) -> List[m.VoiceTrack]:
-        data = await self._t.json("POST", self._path(id, "/voice"), json_body={"langs": langs}, idempotency_key=idempotency_key)
+    async def render_voice(
+        self,
+        id: str,
+        langs: List[str],
+        *,
+        voice: Optional[str] = None,
+        voice_by_speaker: Optional[Dict[str, str]] = None,
+        near: Optional[int] = None,
+        listener_token: Optional[str] = None,
+        share_code: Optional[str] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> List[m.VoiceTrack]:
+        body: Dict[str, Any] = {"langs": langs}
+        if voice is not None:
+            body["voice"] = voice
+        if voice_by_speaker is not None:
+            body["voiceBySpeaker"] = {str(k): v for k, v in voice_by_speaker.items()}
+        if near is not None:
+            body["near"] = near
+        data = await self._t.json(
+            "POST", self._path(id, "/voice"), query=listener_query(listener_token, share_code), json_body=body, idempotency_key=idempotency_key
+        )
         return [m.VoiceTrack.model_validate(x) for x in data or []]
 
-    async def voice_clip(self, id: str, sentence: int, lang: str, *, format: Optional[str] = None) -> bytes:
+    async def voice_clip(
+        self,
+        id: str,
+        sentence: int,
+        lang: str,
+        *,
+        format: Optional[str] = None,
+        voice: Optional[str] = None,
+        part: Optional[int] = None,
+        listener_token: Optional[str] = None,
+        share_code: Optional[str] = None,
+    ) -> bytes:
         """One sentence spoken in ``lang``: ``sentence`` is a transcript sentence's
         ``sentenceId``, not a segment's position.  In the recording's default reading: each
         speaker in their granted clone, else a stock voice of their gender."""
-        resp = await self._t.raw(
-            "GET", self._path(id, f"/voice/{sentence}"), headers={"accept": "*/*"}, query={"lang": lang, "format": format}
-        )
+        query = {**listener_query(listener_token, share_code), "lang": lang, "voice": voice, "format": format, "part": part or None}
+        resp = await self._t.raw("GET", self._path(id, f"/voice/{sentence}"), headers={"accept": "*/*"}, query=query)
         return resp.content
 
     async def media_token(self, id: str) -> Dict[str, Any]:
@@ -681,6 +721,10 @@ class Corrections(_Group):
 
 class ShareLinks(_Group):
     """``vs.share_links``: named public links (create and list them on their owner)."""
+
+    async def open(self, code: str) -> m.SharedTranscript:
+        """What a share code opens, with no credential: pass the code as ``share_code`` to the recording's reads."""
+        return _one(m.SharedTranscript, await self._t.json("GET", f"/v1/shares/{_p(code)}", anonymous=True))
 
     async def update(self, id: str, **fields: Any) -> m.ShareLink:
         body = _body(m.UpdateShareLink, fields)

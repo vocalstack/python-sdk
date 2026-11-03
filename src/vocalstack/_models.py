@@ -293,10 +293,13 @@ class SourceInfo(_Base):
 
     bytes: Optional[int] = None
     duration_s: Optional[float] = Field(default=None, alias="durationS")
+    embed_id: Optional[str] = Field(default=None, alias="embedId")
     format: Optional[str] = None
     kind: SourceKind
     mime: Optional[str] = None
     name: str
+    site: Optional[str] = None
+    thumbnail_url: Optional[str] = Field(default=None, alias="thumbnailUrl")
     url: Optional[str] = None
 
 
@@ -1088,13 +1091,17 @@ class PageMedia(_Base):
 
 
 class LinkProbe(_Base):
+    duration_s: Optional[float] = Field(default=None, alias="durationS")
     kind: LinkKind
     media: Optional[List["PageMedia"]] = None
     ok: bool
     problem: Optional[str] = None
     reason: Optional[ProbeReason] = None
+    site: Optional[str] = None
     site_name: Optional[str] = Field(default=None, alias="siteName")
     source: str
+    thumbnail_url: Optional[str] = Field(default=None, alias="thumbnailUrl")
+    title: Optional[str] = None
 
 
 class LowBalanceAlertChoices(_Base):
@@ -1510,6 +1517,24 @@ Flattened into its owner."""
     views: int
 
 
+class SharedTranscript(_Base):
+    """What the public page learns from a code: the transcript's name, who
+shared it (display name only), what the link allows, and the recording
+plus job state to read from."""
+
+    allow_download: bool = Field(alias="allowDownload")
+    allow_export: bool = Field(alias="allowExport")
+    allow_translate: bool = Field(alias="allowTranslate")
+    broadcast_id: Optional[str] = Field(default=None, alias="broadcastId")
+    code: str
+    created_at: str = Field(alias="createdAt")
+    job: Optional["TranscriptionJob"] = None
+    name: str
+    recording: "Recording"
+    shared_by: str = Field(alias="sharedBy")
+    transcription_id: Optional[str] = Field(default=None, alias="transcriptionId")
+
+
 class SpeakerView(_Base):
     gender: Optional[str] = None
     gender_confidence: Optional[float] = Field(default=None, alias="genderConfidence")
@@ -1582,6 +1607,10 @@ class TranscriptSnapshot(_Base):
     speakers: List["SpeakerView"]
     state: RecordingState
     translation_pending: Optional[bool] = Field(default=None, alias="translationPending")
+
+
+class TranscriptionLookup(_Base):
+    transcription: Optional["Transcription"] = None
 
 
 class TranscriptionPage(_Base):
@@ -1694,6 +1723,7 @@ class Voice(_Base):
     consent: Consent
     consent_at: Optional[str] = Field(default=None, alias="consentAt")
     created_at: str = Field(alias="createdAt")
+    disabled_at: Optional[str] = Field(default=None, alias="disabledAt")
     draft: bool
     enabled: bool
     error: Optional[str] = None
