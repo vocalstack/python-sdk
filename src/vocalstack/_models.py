@@ -397,6 +397,7 @@ stream, an RTMP encoder), which may feed broadcasts (`broadcasts`)."""
     purge_after: Optional[str] = Field(default=None, alias="purgeAfter")
     recording_count: int = Field(alias="recordingCount")
     settings: "Settings"
+    share_code: Optional[str] = Field(default=None, alias="shareCode")
     share_url: str = Field(alias="shareUrl")
     source: "CaptureSource"
     tags: Optional[List["TagRef"]] = None
@@ -1324,6 +1325,10 @@ class PublishGrant(_Base):
     recording: "Recording"
     session_id: Optional[str] = Field(default=None, alias="sessionId")
     stream_url: Optional[str] = Field(default=None, alias="streamUrl")
+
+
+class PublishedShare(_Base):
+    code: Optional[str] = None
 
 
 class RecordingEvent(_Base):

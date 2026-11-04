@@ -4,6 +4,7 @@ the API document (``/v1/openapi.json``)."""
 from __future__ import annotations
 
 import asyncio
+import datetime
 import json
 import os
 import time
@@ -196,6 +197,23 @@ class Broadcasts(_ParentResource):
         return _one(m.AudioSourceCheck, data)
 
 
+_LIST_FILTERS = {
+    "site": "site", "q": "q", "language": "language", "kind": "kind", "origin": "origin", "tag": "tag",
+    "broadcast": "broadcast", "created_after": "createdAfter", "created_before": "createdBefore", "shared": "shared",
+}
+
+
+def _list_filters(**filters: Any) -> Dict[str, Any]:
+    out: Dict[str, Any] = {}
+    for k, v in filters.items():
+        if isinstance(v, datetime.datetime):
+            v = v.isoformat() if v.tzinfo else v.replace(tzinfo=datetime.timezone.utc).isoformat()
+        elif isinstance(v, datetime.date):
+            v = v.isoformat()
+        out[_LIST_FILTERS[k]] = v
+    return out
+
+
 class Transcriptions(_ParentResource):
     """``vs.transcriptions``: a file, a link, a microphone or a stream, transcribed and stored."""
 
@@ -204,14 +222,62 @@ class Transcriptions(_ParentResource):
     _model = m.Transcription
     _update = m.UpdateTranscription
 
+    async def list(
+        self,
+        lifecycle: str = "active",
+        *,
+        site: Optional[str] = None,
+        q: Optional[str] = None,
+        language: Optional[str] = None,
+        kind: Optional[str] = None,
+        origin: Optional[str] = None,
+        tag: Optional[str] = None,
+        broadcast: Optional[str] = None,
+        created_after: Optional[Union[str, datetime.date]] = None,
+        created_before: Optional[Union[str, datetime.date]] = None,
+        shared: Optional[bool] = None,
+    ) -> List[m.Transcription]:
+        """Every transcription that matches, newest first, read to the last
+        page. The filters are ``list_page``'s: ``shared=True``, ``q``,
+        ``site``, ``language``, ``kind``, ``origin``, ``tag``, ``broadcast``,
+        ``created_after``, ``created_before``."""
+        query = _list_filters(
+            site=site, q=q, language=language, kind=kind, origin=origin, tag=tag, broadcast=broadcast,
+            created_after=created_after, created_before=created_before, shared=shared,
+        )
+        items = await _all_pages(lambda c: self._t.json("GET", self._base, query={"lifecycle": lifecycle, "cursor": c, **query}), self._key)
+        return [m.Transcription.model_validate(x) for x in items]
+
     async def list_page(
-        self, *, lifecycle: str = "active", cursor: Optional[str] = None, limit: Optional[int] = None, site: Optional[str] = None
+        self,
+        *,
+        lifecycle: str = "active",
+        cursor: Optional[str] = None,
+        limit: Optional[int] = None,
+        site: Optional[str] = None,
+        q: Optional[str] = None,
+        language: Optional[str] = None,
+        kind: Optional[str] = None,
+        origin: Optional[str] = None,
+        tag: Optional[str] = None,
+        broadcast: Optional[str] = None,
+        created_after: Optional[Union[str, datetime.date]] = None,
+        created_before: Optional[Union[str, datetime.date]] = None,
+        shared: Optional[bool] = None,
     ) -> m.TranscriptionPage:
         """One page of transcriptions, newest first (``limit`` 1 to 200, 100
         by default); ``cursor`` is the previous page's ``next_cursor``, and
-        the last page has none. ``site`` (``youtube``, ``vimeo``…) keeps only
-        those made from a link to that site."""
-        data = await self._t.json("GET", self._base, query={"lifecycle": lifecycle, "cursor": cursor, "limit": limit, "site": site})
+        the last page has none. Every filter given must match: ``q`` (words
+        in the name, source name or link), ``site`` (``youtube``,
+        ``vimeo``…), ``language`` (``en``…), ``kind`` (``file``, ``link``,
+        ``live``), ``origin``, ``tag`` (id or name), ``broadcast`` (id),
+        ``created_after`` / ``created_before`` (a datetime, a date, or the
+        API's string), ``shared`` (``True``: each has a ``share_code``)."""
+        query = _list_filters(
+            site=site, q=q, language=language, kind=kind, origin=origin, tag=tag, broadcast=broadcast,
+            created_after=created_after, created_before=created_before, shared=shared,
+        )
+        data = await self._t.json("GET", self._base, query={"lifecycle": lifecycle, "cursor": cursor, "limit": limit, **query})
         return _one(m.TranscriptionPage, data)
 
     async def upload_recording(
@@ -725,6 +791,10 @@ class ShareLinks(_Group):
     async def open(self, code: str) -> m.SharedTranscript:
         """What a share code opens, with no credential: pass the code as ``share_code`` to the recording's reads."""
         return _one(m.SharedTranscript, await self._t.json("GET", f"/v1/shares/{_p(code)}", anonymous=True))
+
+    async def find(self, url: str, site: str) -> m.PublishedShare:
+        """The share code of a link a VocalStack player published on ``site``, with no credential."""
+        return _one(m.PublishedShare, await self._t.json("GET", "/v1/shares", query={"url": url, "site": site}, anonymous=True))
 
     async def update(self, id: str, **fields: Any) -> m.ShareLink:
         body = _body(m.UpdateShareLink, fields)

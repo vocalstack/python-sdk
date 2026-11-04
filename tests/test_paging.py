@@ -47,6 +47,26 @@ class Paging(unittest.TestCase):
         self.assertEqual([r.url.params.get("cursor") for r in calls], [None, "c1"])
         self.assertTrue(all(r.url.params.get("lifecycle") == "all" for r in calls))
 
+    def test_list_sends_the_search_filters(self):
+        import datetime
+
+        shared = dict(tx("t1"), shareCode="abc")
+        vs, calls = client([{"transcriptions": [shared], "nextCursor": "c1"}, {"transcriptions": [tx("t2")]}])
+        got = run(vs.transcriptions.list(shared=True, q="team meeting", site="youtube", language="en", kind="link", tag="Talks",
+                                         created_after=datetime.date(2026, 1, 1), created_before="2026-02-01T00:00:00Z"))
+        self.assertEqual([t.share_code for t in got], ["abc", None])
+        self.assertEqual([r.url.params.get("cursor") for r in calls], [None, "c1"])
+        for r in calls:
+            p = r.url.params
+            self.assertEqual((p.get("shared"), p.get("q"), p.get("site"), p.get("language"), p.get("kind"), p.get("tag")),
+                             ("true", "team meeting", "youtube", "en", "link", "Talks"))
+            self.assertEqual((p.get("createdAfter"), p.get("createdBefore"), p.get("origin")), ("2026-01-01", "2026-02-01T00:00:00Z", None))
+        vs, calls = client([{"transcriptions": []}])
+        run(vs.transcriptions.list_page(shared=False, origin="api", broadcast="b1", limit=5))
+        self.assertEqual(dict(calls[0].url.params), {"lifecycle": "active", "shared": "false", "origin": "api", "broadcast": "b1", "limit": "5"})
+        with self.assertRaises(TypeError):
+            run(vs.transcriptions.list(sharde=True))
+
     def test_list_page_asks_for_one_page(self):
         vs, calls = client([{"transcriptions": [tx("t1")], "nextCursor": "c9"}])
         page = run(vs.transcriptions.list_page(cursor="c8", limit=100))
