@@ -240,6 +240,12 @@ class BatchCounts(_Base):
     stopped: int
 
 
+class Blocked(_Base):
+    at: str
+    contact: str
+    reason: str
+
+
 class BroadcastRef(_Base):
     """A broadcast a live transcription feeds (`Transcription.broadcasts`)."""
 
@@ -379,6 +385,7 @@ stream, an RTMP encoder), which may feed broadcasts (`broadcasts`)."""
 
     archived_at: Optional[str] = Field(default=None, alias="archivedAt")
     batch_id: Optional[str] = Field(default=None, alias="batchId")
+    blocked: Optional["Blocked"] = None
     broadcasts: Optional[List["BroadcastRef"]] = None
     code: str
     created_at: str = Field(alias="createdAt")
@@ -1327,10 +1334,6 @@ class PublishGrant(_Base):
     stream_url: Optional[str] = Field(default=None, alias="streamUrl")
 
 
-class PublishedShare(_Base):
-    code: Optional[str] = None
-
-
 class RecordingEvent(_Base):
     """One durable frame of a recording, as the host's screen received it."""
 
@@ -1387,6 +1390,7 @@ class SearchHit(_Base):
     rendered: Optional[str] = None
     score: float
     sentence_id: int = Field(alias="sentenceId")
+    share_code: Optional[str] = Field(default=None, alias="shareCode")
     speaker: int
     text: str
     transcription_id: str = Field(alias="transcriptionId")
@@ -1461,6 +1465,12 @@ class SentenceView(_Base):
     translations: Optional[Dict[str, str]] = None
     unclear: Optional[bool] = None
     wall_start: float = Field(alias="wallStart")
+
+
+class SpeakerNumber(_Base):
+    name: Optional[str] = None
+    number: int
+    speaker: int
 
 
 class SessionStats(_Base):
@@ -1546,6 +1556,7 @@ class SpeakerView(_Base):
     identified: Optional[bool] = None
     identified_confidence: Optional[float] = Field(default=None, alias="identifiedConfidence")
     name: str
+    number: Optional[int] = None
     speaker: int
     speech_s: Optional[float] = Field(default=None, alias="speechS")
     voice_color: Optional[str] = Field(default=None, alias="voiceColor")
@@ -1905,6 +1916,11 @@ class TranscriptSpeakerIdentified(_Base):
     voice_id: Optional[str] = Field(default=None, alias="voiceId")
 
 
+class TranscriptSpeakerNumbers(_Base):
+    speakers: List["SpeakerNumber"]
+    type: Literal["transcript.speakerNumbers"] = "transcript.speakerNumbers"
+
+
 class TranscriptSentence(_Base):
     sentence: "SentenceSegment"
     type: Literal["transcript.sentence"] = "transcript.sentence"
@@ -2016,7 +2032,7 @@ class ErrorFrame(_Base):
     type: Literal["error"] = "error"
 
 
-ServerFrame = Annotated[Union[SessionLoading, SessionReady, TranscriptCommitted, TranscriptDraft, TranscriptWords, TranscriptAmended, TranscriptLatency, TranscriptSpeaker, TranscriptSpeakerGender, TranscriptSpeakerIdentified, TranscriptSentence, TranscriptTranslated, TranscriptVoice, TranscriptVoiceStatus, TranscriptLanguageStatus, TranscriptRetracted, TranscriptHeld, TranscriptProgress, StreamPull, SourceProgress, SourcePrepared, SessionDone, ErrorFrame], Field(discriminator="type")]
+ServerFrame = Annotated[Union[SessionLoading, SessionReady, TranscriptCommitted, TranscriptDraft, TranscriptWords, TranscriptAmended, TranscriptLatency, TranscriptSpeaker, TranscriptSpeakerGender, TranscriptSpeakerIdentified, TranscriptSpeakerNumbers, TranscriptSentence, TranscriptTranslated, TranscriptVoice, TranscriptVoiceStatus, TranscriptLanguageStatus, TranscriptRetracted, TranscriptHeld, TranscriptProgress, StreamPull, SourceProgress, SourcePrepared, SessionDone, ErrorFrame], Field(discriminator="type")]
 
 class SubscribeUpdate(_Base):
     audio: Optional[bool] = None
@@ -2101,6 +2117,11 @@ class TranscriptSpeakerNamed(_Base):
     type: Literal["transcript.speakerNamed"] = "transcript.speakerNamed"
 
 
+class TranscriptSpeakerNumbers(_Base):
+    speakers: List["SpeakerNumber"]
+    type: Literal["transcript.speakerNumbers"] = "transcript.speakerNumbers"
+
+
 class RecordingStarted(_Base):
     recording_id: str = Field(alias="recordingId")
     transcription_id: str = Field(alias="transcriptionId")
@@ -2155,14 +2176,14 @@ class SubscribeGap(_Base):
     type: Literal["subscribe.gap"] = "subscribe.gap"
 
 
-SubscriberFrame = Annotated[Union[SubscribeReady, RecordingState, RecordingSettings, RecordingSilence, RecordingExpiring, TranscriptCorrected, TranscriptSpeakerGender, TranscriptSpeakerIdentified, TranscriptSpeakerNamed, RecordingStarted, JobProgress, StreamIngest, RecordingEnded, Audience, SubscribeGap], Field(discriminator="type")]
+SubscriberFrame = Annotated[Union[SubscribeReady, RecordingState, RecordingSettings, RecordingSilence, RecordingExpiring, TranscriptCorrected, TranscriptSpeakerGender, TranscriptSpeakerIdentified, TranscriptSpeakerNamed, TranscriptSpeakerNumbers, RecordingStarted, JobProgress, StreamIngest, RecordingEnded, Audience, SubscribeGap], Field(discriminator="type")]
 
-SERVER_FRAME_TYPES = frozenset(["session.loading", "session.ready", "transcript.committed", "transcript.draft", "transcript.words", "transcript.amended", "transcript.latency", "transcript.speaker", "transcript.speakerGender", "transcript.speakerIdentified", "transcript.sentence", "transcript.translated", "transcript.voice", "transcript.voiceStatus", "transcript.languageStatus", "transcript.retracted", "transcript.held", "transcript.progress", "stream.pull", "source.progress", "source.prepared", "session.done", "error"])
+SERVER_FRAME_TYPES = frozenset(["session.loading", "session.ready", "transcript.committed", "transcript.draft", "transcript.words", "transcript.amended", "transcript.latency", "transcript.speaker", "transcript.speakerGender", "transcript.speakerIdentified", "transcript.speakerNumbers", "transcript.sentence", "transcript.translated", "transcript.voice", "transcript.voiceStatus", "transcript.languageStatus", "transcript.retracted", "transcript.held", "transcript.progress", "stream.pull", "source.progress", "source.prepared", "session.done", "error"])
 
 _server_frame_adapter: TypeAdapter[ServerFrame] = TypeAdapter(ServerFrame)
 
 
-TranscriptEvent = Union[TranscriptCommitted, TranscriptDraft, TranscriptWords, TranscriptAmended, TranscriptLatency, TranscriptSpeaker, TranscriptSpeakerGender, TranscriptSpeakerIdentified, TranscriptSentence, TranscriptTranslated, TranscriptVoice, TranscriptVoiceStatus, TranscriptLanguageStatus, TranscriptRetracted, TranscriptHeld, TranscriptProgress]
+TranscriptEvent = Union[TranscriptCommitted, TranscriptDraft, TranscriptWords, TranscriptAmended, TranscriptLatency, TranscriptSpeaker, TranscriptSpeakerGender, TranscriptSpeakerIdentified, TranscriptSpeakerNumbers, TranscriptSentence, TranscriptTranslated, TranscriptVoice, TranscriptVoiceStatus, TranscriptLanguageStatus, TranscriptRetracted, TranscriptHeld, TranscriptProgress]
 
 
 def parse_server_frame(text: str) -> Optional[ServerFrame]:

@@ -620,11 +620,14 @@ class Recordings(_Group):
         voice: Optional[str] = None,
         voice_by_speaker: Optional[Dict[str, str]] = None,
         near: Optional[int] = None,
+        consent: Optional[bool] = None,
         listener_token: Optional[str] = None,
         share_code: Optional[str] = None,
         idempotency_key: Optional[str] = None,
     ) -> List[m.VoiceTrack]:
         body: Dict[str, Any] = {"langs": langs}
+        if consent is not None:
+            body["consent"] = consent
         if voice is not None:
             body["voice"] = voice
         if voice_by_speaker is not None:
@@ -791,10 +794,6 @@ class ShareLinks(_Group):
     async def open(self, code: str) -> m.SharedTranscript:
         """What a share code opens, with no credential: pass the code as ``share_code`` to the recording's reads."""
         return _one(m.SharedTranscript, await self._t.json("GET", f"/v1/shares/{_p(code)}", anonymous=True))
-
-    async def find(self, url: str, site: str) -> m.PublishedShare:
-        """The share code of a link a VocalStack player published on ``site``, with no credential."""
-        return _one(m.PublishedShare, await self._t.json("GET", "/v1/shares", query={"url": url, "site": site}, anonymous=True))
 
     async def update(self, id: str, **fields: Any) -> m.ShareLink:
         body = _body(m.UpdateShareLink, fields)
@@ -972,8 +971,20 @@ class Search(_Group):
         recording: Optional[str] = None,
         lang: Optional[str] = None,
         limit: Optional[int] = None,
+        site: Optional[str] = None,
+        language: Optional[str] = None,
+        kind: Optional[str] = None,
+        origin: Optional[str] = None,
+        tag: Optional[str] = None,
+        created_after: Optional[Union[str, datetime.date]] = None,
+        created_before: Optional[Union[str, datetime.date]] = None,
+        shared: Optional[bool] = None,
     ) -> m.SearchResults:
-        """``q`` is 2 or more characters; ``broadcasts`` narrows to those links (codes)."""
+        """``q`` is 2 or more characters; ``broadcasts`` narrows to those links (codes).
+        ``site``, ``language``, ``kind``, ``origin``, ``tag``, ``created_after``,
+        ``created_before`` and ``shared`` are ``transcriptions.list``'s filters and
+        narrow the search to the caller's own transcriptions; a hit's ``share_code``
+        plays in ``@vocalstack/player`` from ``media_start``."""
         query = {
             "q": q,
             "broadcasts": ",".join(broadcasts) if broadcasts else None,
@@ -981,6 +992,10 @@ class Search(_Group):
             "recording": recording,
             "lang": lang,
             "limit": limit,
+            **_list_filters(
+                site=site, language=language, kind=kind, origin=origin, tag=tag,
+                created_after=created_after, created_before=created_before, shared=shared,
+            ),
         }
         return _one(m.SearchResults, await self._t.json("GET", "/v1/search", query=query))
 

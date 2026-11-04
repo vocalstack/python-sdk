@@ -36,6 +36,11 @@ class RenderVoice(unittest.TestCase):
         self.assertEqual(str(calls[0].url), "http://api.test/v1/recordings/r1/voice?shareCode=abc")
         self.assertEqual(json.loads(calls[0].content), {"langs": ["es"], "voiceBySpeaker": {"0": "stock-a"}, "near": 4})
 
+    def test_a_cloned_voice_is_asked_with_consent(self):
+        vs, calls = client([])
+        run(vs.recordings.render_voice("r1", ["es"], voice_by_speaker={0: "clone:abc"}, consent=True))
+        self.assertEqual(json.loads(calls[0].content), {"langs": ["es"], "consent": True, "voiceBySpeaker": {"0": "clone:abc"}})
+
 
 class OpenShare(unittest.TestCase):
     def test_reads_a_code_with_no_credential(self):
