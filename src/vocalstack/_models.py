@@ -1794,6 +1794,7 @@ class VoiceTrack(_Base):
     state: str
     voice: Optional[str] = None
     voice_key: str = Field(alias="voiceKey")
+    voices: Optional[str] = None
     word_times: Optional[Dict[str, List[List[float]]]] = Field(default=None, alias="wordTimes")
 
 

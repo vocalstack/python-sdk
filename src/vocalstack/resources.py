@@ -617,6 +617,7 @@ class Recordings(_Group):
         id: str,
         langs: List[str],
         *,
+        voices: Optional[str] = None,
         voice: Optional[str] = None,
         voice_by_speaker: Optional[Dict[str, str]] = None,
         near: Optional[int] = None,
@@ -628,6 +629,8 @@ class Recordings(_Group):
         body: Dict[str, Any] = {"langs": langs}
         if consent is not None:
             body["consent"] = consent
+        if voices is not None:
+            body["voices"] = voices
         if voice is not None:
             body["voice"] = voice
         if voice_by_speaker is not None:
@@ -646,6 +649,7 @@ class Recordings(_Group):
         lang: str,
         *,
         format: Optional[str] = None,
+        voices: Optional[str] = None,
         voice: Optional[str] = None,
         part: Optional[int] = None,
         listener_token: Optional[str] = None,
@@ -654,7 +658,7 @@ class Recordings(_Group):
         """One sentence spoken in ``lang``: ``sentence`` is a transcript sentence's
         ``sentenceId``, not a segment's position.  In the recording's default reading: each
         speaker in their granted clone, else a stock voice of their gender."""
-        query = {**listener_query(listener_token, share_code), "lang": lang, "voice": voice, "format": format, "part": part or None}
+        query = {**listener_query(listener_token, share_code), "lang": lang, "voices": voices, "voice": voice, "format": format, "part": part or None}
         resp = await self._t.raw("GET", self._path(id, f"/voice/{sentence}"), headers={"accept": "*/*"}, query=query)
         return resp.content
 
