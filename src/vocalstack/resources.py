@@ -969,6 +969,7 @@ class Search(_Group):
         broadcasts: Optional[List[str]] = None,
         listener_tokens: Optional[List[str]] = None,
         recording: Optional[str] = None,
+        transcription: Optional[str] = None,
         lang: Optional[str] = None,
         limit: Optional[int] = None,
         site: Optional[str] = None,
@@ -990,6 +991,7 @@ class Search(_Group):
             "broadcasts": ",".join(broadcasts) if broadcasts else None,
             "listenerTokens": ",".join(listener_tokens) if listener_tokens else None,
             "recording": recording,
+            "transcription": transcription,
             "lang": lang,
             "limit": limit,
             **_list_filters(

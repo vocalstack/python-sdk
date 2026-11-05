@@ -1399,6 +1399,7 @@ class SearchHit(_Base):
 
 class SearchResults(_Base):
     hits: List["SearchHit"]
+    more: Optional[bool] = None
     query: str
     query_en: str = Field(alias="queryEn")
 
