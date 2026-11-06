@@ -485,11 +485,13 @@ class Limits2(_Base):
     files_per_batch: Optional[int] = Field(default=None, alias="filesPerBatch")
     max_file_bytes: Optional[int] = Field(default=None, alias="maxFileBytes")
     max_live_seconds: Optional[int] = Field(default=None, alias="maxLiveSeconds")
+    questions_per_day: Optional[int] = Field(default=None, alias="questionsPerDay")
     requests_per_min: Optional[int] = Field(default=None, alias="requestsPerMin")
     retention_audio_days: Optional[int] = Field(default=None, alias="retentionAudioDays")
     retention_transcriptions_days: Optional[int] = Field(default=None, alias="retentionTranscriptionsDays")
     retention_video_days: Optional[int] = Field(default=None, alias="retentionVideoDays")
     retention_voices_days: Optional[int] = Field(default=None, alias="retentionVoicesDays")
+    vector_searches_per_hour: Optional[int] = Field(default=None, alias="vectorSearchesPerHour")
 
 
 class LimitsUsage(_Base):
