@@ -398,6 +398,7 @@ stream, an RTMP encoder), which may feed broadcasts (`broadcasts`)."""
     last_recording: Optional["LastRecording"] = Field(default=None, alias="lastRecording")
     lifecycle: Lifecycle
     live: Optional[bool] = None
+    locked: Optional[bool] = None
     name: str
     origin: Literal["dashboard", "api", "extension", "desktop_app", "obs", "wordpress", "payload", "strapi", "sanity", "contentful", "mcp", "batch_api", "broadcast", "unknown"]
     owner_principal_id: str = Field(alias="ownerPrincipalId")
@@ -1665,6 +1666,7 @@ class UpdateTranscription(_Base):
 transcription is shared through its share links, so it has no access,
 password or link to change here."""
 
+    locked: Optional[bool] = None
     name: Optional[str] = None
     settings: Optional["SettingsPatch"] = None
 
