@@ -86,6 +86,12 @@ class Actor(_Base):
     user_id: Optional[str] = Field(default=None, alias="userId")
 
 
+class Allowance(_Base):
+    limit: Optional[int] = None
+    remaining: Optional[int] = None
+    resets_at: Optional[str] = Field(default=None, alias="resetsAt")
+
+
 class WordAlt(_Base):
     prob: float
     text: str
@@ -1156,6 +1162,15 @@ class NameSpeaker(_Base):
     name: Optional[str] = None
 
 
+class Passage(_Base):
+    """The whole paragraph the hit was found in, as spoken: give it to your own
+model as context, with `mediaStart` to cite or play the moment."""
+
+    media_end: float = Field(alias="mediaEnd")
+    media_start: float = Field(alias="mediaStart")
+    text: str
+
+
 class PatchVoice(_Base):
     color: Optional[str] = None
     consent: Optional[bool] = None
@@ -1736,6 +1751,33 @@ class UsageReport(_Base):
     start_date: str = Field(alias="startDate")
     total: float
     tz: str
+
+
+class VectorHit(_Base):
+    link_code: str = Field(alias="linkCode")
+    link_name: str = Field(alias="linkName")
+    live: bool
+    media_start: float = Field(alias="mediaStart")
+    passage: "Passage"
+    recorded_at: Optional[str] = Field(default=None, alias="recordedAt")
+    recording_id: str = Field(alias="recordingId")
+    rendered: Optional[str] = None
+    score: float
+    sentence_id: int = Field(alias="sentenceId")
+    share_code: Optional[str] = Field(default=None, alias="shareCode")
+    similarity: float
+    speaker: int
+    text: str
+    transcription_id: str = Field(alias="transcriptionId")
+    vector: bool
+    wall_start: float = Field(alias="wallStart")
+
+
+class VectorResults(_Base):
+    allowance: "Allowance"
+    hits: List["VectorHit"]
+    query: str
+    state: str
 
 
 class Voice(_Base):

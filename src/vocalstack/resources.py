@@ -964,7 +964,7 @@ class Voices(_Group):
 
 
 class Search(_Group):
-    """``vs.search``: full-text search over the caller's transcripts."""
+    """``vs.search``: full-text and vector search over the caller's transcripts."""
 
     async def query(
         self,
@@ -1004,6 +1004,36 @@ class Search(_Group):
             ),
         }
         return _one(m.SearchResults, await self._t.json("GET", "/v1/search", query=query))
+
+    async def vector(
+        self,
+        q: str,
+        *,
+        recording: Optional[str] = None,
+        transcription: Optional[str] = None,
+        site: Optional[str] = None,
+        language: Optional[str] = None,
+        kind: Optional[str] = None,
+        origin: Optional[str] = None,
+        tag: Optional[str] = None,
+        created_after: Optional[Union[str, datetime.date]] = None,
+        created_before: Optional[Union[str, datetime.date]] = None,
+        shared: Optional[bool] = None,
+    ) -> m.VectorResults:
+        """Vector search: the caller's paragraphs closest in meaning to ``q``, in any
+        language. Each hit carries its whole paragraph as ``passage`` (context for
+        your own model) and its ``similarity``; ``allowance`` is the plan's searches
+        left this hour (``None`` with no limit)."""
+        query = {
+            "q": q,
+            "recording": recording,
+            "transcription": transcription,
+            **_list_filters(
+                site=site, language=language, kind=kind, origin=origin, tag=tag,
+                created_after=created_after, created_before=created_before, shared=shared,
+            ),
+        }
+        return _one(m.VectorResults, await self._t.json("GET", "/v1/search/vector", query=query))
 
 
 class Me(_Group):
