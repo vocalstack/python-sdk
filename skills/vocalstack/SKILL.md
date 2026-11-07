@@ -20,9 +20,6 @@ labels and translation. The `vocalstack` package has one asyncio client,
 - A **job** is a file or link recording's transcription work:
   `await vs.jobs.wait(recording_id)` polls it until it is `done` or `failed`
   (`on_progress=lambda job: ...` sees each read: `job.state`, `job.progress.pct`).
-- A **batch** is many files transcribed together for less than one
-  transcription each: `vs.batches.create()`, `add_file`/`add_url` per file,
-  `start`, then `wait` (section 6).
 - A **broadcast** is a link listeners open to follow a live recording.
 - A **realtime session** (`vs.realtime`) is a socket you stream audio into and
   read the transcript from. Nothing is stored. "Session" means only this.
@@ -196,32 +193,6 @@ for h in res.hits:
     print(f"{h.similarity:.2f}", h.passage.media_start, h.passage.text)
 ```
 
-## 6. A batch of files
-
-Many files at once cost less as a batch: one create, one minimum charge for
-the whole batch. Its files get transcripts, exports and speaker labels (when
-`settings.speakerLabels` asks), never a summary, title, share link or voices.
-
-```python
-import asyncio, os, sys
-from vocalstack import VocalStack
-
-async def main(paths):
-    async with VocalStack(os.environ.get("VOCALSTACK_BASE_URL"), api_key=os.environ["VOCALSTACK_API_KEY"]) as vs:
-        batch = await vs.batches.create(name="Interviews", settings={"spokenLanguage": "en"})
-        for path in paths:
-            await vs.batches.add_file(batch.id, file=path)  # or add_url(batch.id, url)
-        await vs.batches.start(batch.id)
-        done = await vs.batches.wait(batch.id)  # done (or stopped); check done.counts.failed
-        for tx in done.files or []:
-            if tx.job and tx.job.state == "done":
-                snap = await vs.recordings.transcript(tx.job.recording_id)
-                print(tx.name, " ".join(s.text for s in snap.sentences))
-        # vs.batches.export(batch.id, "srt") is every finished transcript in one zip.
-
-asyncio.run(main(sys.argv[1:]))
-```
-
 ## Errors
 
 A failed call raises `vocalstack.VocalStackError` with `.code`, `.message`,
@@ -257,8 +228,7 @@ except VocalStackError as e:
 - The other groups: `vs.transcriptions` (`list`, `get`, `update`, `archive`,
   `restore`, `purge`, `list_share_links`, `create_share_link`), `vs.recordings`
   (`get`, `summarize`, `summary`, `translation`, `audio_url`, `subscribe`),
-  `vs.batches` (`create`, `add_file`, `add_url`, `start`, `wait`, `get`, `list`,
-  `export`, `stop`, `delete`), `vs.corrections`, `vs.share_links`, `vs.voices`, `vs.broadcasts`,
+  `vs.corrections`, `vs.share_links`, `vs.voices`, `vs.broadcasts`,
   `vs.me` (`get`, `usage`), `vs.languages`, `vs.rtmp`, `vs.events`, `vs.meta`.
   Each method is its operation's name in the OpenAPI document, in snake_case
   (`transcriptions.create` is `POST /v1/transcriptions`).
