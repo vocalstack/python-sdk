@@ -86,6 +86,36 @@ class OnFrame(unittest.TestCase):
 
 
 
+class Queued(unittest.TestCase):
+    def test_a_session_waiting_in_line_hears_session_queued_keeps_waiting_and_starts(self):
+        async def serve(ws):
+            for position in (2, 1, 1):
+                await ws.send(json.dumps({"type": "session.queued", "position": position, "waitedS": 0, "bufferedS": 0, "droppedS": 0}))
+                await asyncio.sleep(0.2)
+            await ws.send(json.dumps({"type": "session.ready"}))
+            async for m in ws:
+                if isinstance(m, bytes) or json.loads(m)["type"] != "eof":
+                    continue
+                await ws.send(json.dumps({"type": "session.done", "reason": "eof", "stats": {"audioS": 1, "processingS": 0.5, "realtimeFactor": 2}}))
+                await ws.close()
+                return
+
+        async def go():
+            queued = []
+            async with websockets.serve(serve, "127.0.0.1", 0) as server:
+                port = server.sockets[0].getsockname()[1]
+                url = f"ws://127.0.0.1:{port}/v1/realtime/sessions/t/socket"
+                session = await RealtimeSession.connect("s1", url, ready_deadline_s=0.35, on_frame=lambda f: queued.append(f.position) if f.type == "session.queued" else None)
+                await session.eof()
+                async for _ in session:
+                    pass
+                return queued, session.done_reason
+
+        queued, reason = run(go())
+        self.assertEqual(queued, [2, 1, 1])
+        self.assertEqual(reason, "eof")
+
+
 class EngineLost(unittest.TestCase):
     def test_a_socket_that_closes_with_no_session_done_is_engine_lost_not_a_quiet_end(self):
         async def serve(ws):

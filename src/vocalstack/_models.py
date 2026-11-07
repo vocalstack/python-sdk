@@ -1902,6 +1902,14 @@ class SessionLoading(_Base):
     type: Literal["session.loading"] = "session.loading"
 
 
+class SessionQueued(_Base):
+    buffered_s: Optional[float] = Field(default=None, alias="bufferedS")
+    dropped_s: Optional[float] = Field(default=None, alias="droppedS")
+    position: Optional[int] = None
+    type: Literal["session.queued"] = "session.queued"
+    waited_s: float = Field(alias="waitedS")
+
+
 class SessionReady(_Base):
     type: Literal["session.ready"] = "session.ready"
 
@@ -2080,7 +2088,7 @@ class ErrorFrame(_Base):
     type: Literal["error"] = "error"
 
 
-ServerFrame = Annotated[Union[SessionLoading, SessionReady, TranscriptCommitted, TranscriptDraft, TranscriptWords, TranscriptAmended, TranscriptLatency, TranscriptSpeaker, TranscriptSpeakerGender, TranscriptSpeakerIdentified, TranscriptSpeakerNumbers, TranscriptSentence, TranscriptTranslated, TranscriptVoice, TranscriptVoiceStatus, TranscriptLanguageStatus, TranscriptRetracted, TranscriptHeld, TranscriptProgress, StreamPull, SourceProgress, SourcePrepared, SessionDone, ErrorFrame], Field(discriminator="type")]
+ServerFrame = Annotated[Union[SessionLoading, SessionQueued, SessionReady, TranscriptCommitted, TranscriptDraft, TranscriptWords, TranscriptAmended, TranscriptLatency, TranscriptSpeaker, TranscriptSpeakerGender, TranscriptSpeakerIdentified, TranscriptSpeakerNumbers, TranscriptSentence, TranscriptTranslated, TranscriptVoice, TranscriptVoiceStatus, TranscriptLanguageStatus, TranscriptRetracted, TranscriptHeld, TranscriptProgress, StreamPull, SourceProgress, SourcePrepared, SessionDone, ErrorFrame], Field(discriminator="type")]
 
 class SubscribeUpdate(_Base):
     audio: Optional[bool] = None
@@ -2226,7 +2234,7 @@ class SubscribeGap(_Base):
 
 SubscriberFrame = Annotated[Union[SubscribeReady, RecordingState, RecordingSettings, RecordingSilence, RecordingExpiring, TranscriptCorrected, TranscriptSpeakerGender, TranscriptSpeakerIdentified, TranscriptSpeakerNamed, TranscriptSpeakerNumbers, RecordingStarted, JobProgress, StreamIngest, RecordingEnded, Audience, SubscribeGap], Field(discriminator="type")]
 
-SERVER_FRAME_TYPES = frozenset(["session.loading", "session.ready", "transcript.committed", "transcript.draft", "transcript.words", "transcript.amended", "transcript.latency", "transcript.speaker", "transcript.speakerGender", "transcript.speakerIdentified", "transcript.speakerNumbers", "transcript.sentence", "transcript.translated", "transcript.voice", "transcript.voiceStatus", "transcript.languageStatus", "transcript.retracted", "transcript.held", "transcript.progress", "stream.pull", "source.progress", "source.prepared", "session.done", "error"])
+SERVER_FRAME_TYPES = frozenset(["session.loading", "session.queued", "session.ready", "transcript.committed", "transcript.draft", "transcript.words", "transcript.amended", "transcript.latency", "transcript.speaker", "transcript.speakerGender", "transcript.speakerIdentified", "transcript.speakerNumbers", "transcript.sentence", "transcript.translated", "transcript.voice", "transcript.voiceStatus", "transcript.languageStatus", "transcript.retracted", "transcript.held", "transcript.progress", "stream.pull", "source.progress", "source.prepared", "session.done", "error"])
 
 _server_frame_adapter: TypeAdapter[ServerFrame] = TypeAdapter(ServerFrame)
 
