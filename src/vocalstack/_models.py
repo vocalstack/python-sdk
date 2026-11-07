@@ -1371,6 +1371,7 @@ class SentenceView(_Base):
 class SpeakerNumber(_Base):
     name: Optional[str] = None
     number: int
+    returning: Optional[bool] = None
     speaker: int
 
 
@@ -1478,6 +1479,7 @@ class SpeakerView(_Base):
     identified_confidence: Optional[float] = Field(default=None, alias="identifiedConfidence")
     name: str
     number: Optional[int] = None
+    returning: Optional[bool] = None
     speaker: int
     speech_s: Optional[float] = Field(default=None, alias="speechS")
     voice_color: Optional[str] = Field(default=None, alias="voiceColor")
