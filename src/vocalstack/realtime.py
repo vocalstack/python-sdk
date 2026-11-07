@@ -382,7 +382,7 @@ async def pace_realtime(
     speed: float = 1.0,
 ) -> None:
     """Feed a whole PCM buffer at ``speed``× realtime, then ``eof()``.
-    Convenience for file/batch sources against the realtime API."""
+    Convenience for file sources against the realtime API."""
     bytes_per_second = 16000 * 4
     chunk = max(4, int(bytes_per_second * chunk_seconds) & ~3)
     start = time.monotonic()
