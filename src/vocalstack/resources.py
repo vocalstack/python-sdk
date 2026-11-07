@@ -348,6 +348,11 @@ class Transcriptions(_ParentResource):
         data = await self._t.json("DELETE", self._path(id, f"/broadcasts/{_p(broadcast_id)}"))
         return _one(m.Transcription, data)
 
+    async def name_appearance(self, id: str, appearance: int, name: Optional[str]) -> None:
+        """Name one speaker of the transcription: ``appearance`` is their
+        display number ("Speaker <number>"); ``None`` clears the name."""
+        await self._t.json("PUT", self._path(id, f"/appearances/{appearance}"), json_body={"name": name})
+
 
 class Recordings(_Group):
     """``vs.recordings``: one take, live or uploaded."""
@@ -556,9 +561,6 @@ class Recordings(_Group):
     async def media_token(self, id: str) -> Dict[str, Any]:
         return await self._t.json("GET", self._path(id, "/media-token"))
 
-    async def name_speaker(self, id: str, speaker: int, name: Optional[str]) -> None:
-        await self._t.json("PUT", self._path(id, f"/speakers/{speaker}"), json_body={"name": name})
-
     async def events(self, id: str, *, after: Optional[int] = None, limit: Optional[int] = None) -> List[m.RecordingEvent]:
         """The durable event log with wall times (owner only): every event
         after ``after`` (a ``seq``; the whole log without it), read ``limit`` a page."""
@@ -724,80 +726,7 @@ class Tags(_Group):
 
 
 class Voices(_Group):
-    """``vs.voices``: the account's cloned voices, and what a language offers."""
-
-    async def list(self, *, lifecycle: Optional[str] = None) -> List[m.Voice]:
-        return _many(m.Voice, await self._t.json("GET", "/v1/voices", query={"lifecycle": lifecycle}), "voices")
-
-    async def get(self, id: str) -> m.Voice:
-        return _one(m.Voice, await self._t.json("GET", f"/v1/voices/{_p(id)}"))
-
-    async def archive(self, id: str) -> m.Voice:
-        """Put a voice away: it stops speaking and is unlinked from its speakers."""
-        return _one(m.Voice, await self._t.json("POST", f"/v1/voices/{_p(id)}/archive"))
-
-    async def restore(self, id: str) -> m.Voice:
-        return _one(m.Voice, await self._t.json("POST", f"/v1/voices/{_p(id)}/restore"))
-
-    async def archive_many(self, ids: List[str]) -> m.ManyResult:
-        return _one(m.ManyResult, await self._t.json("POST", "/v1/voices/archive", json_body={"ids": ids}))
-
-    async def restore_many(self, ids: List[str]) -> m.ManyResult:
-        return _one(m.ManyResult, await self._t.json("POST", "/v1/voices/restore", json_body={"ids": ids}))
-
-    async def delete_many(self, ids: List[str]) -> m.ManyResult:
-        return _one(m.ManyResult, await self._t.json("POST", "/v1/voices/delete", json_body={"ids": ids}))
-
-    async def create(
-        self,
-        name: str,
-        *,
-        sample: Optional[Upload] = None,
-        sample_url: Optional[str] = None,
-        file_name: Optional[str] = None,
-        gender: Optional[str] = None,
-        color: Optional[str] = None,
-        draft: bool = False,
-        idempotency_key: Optional[str] = None,
-    ) -> m.Voice:
-        """Build a voice from a sample or a link. Calling it asserts you have
-        the speaker's permission, unless ``draft``."""
-        meta = _body(
-            m.CreateVoice,
-            {"name": name, "sample_url": sample_url, "gender": gender, "color": color, "draft": draft or None, "consent": not draft},
-        )
-        files: Dict[str, Any] = {"meta": (None, json.dumps(meta), "application/json")}
-        if sample is not None:
-            files["sample"] = await asyncio.to_thread(_file_part, sample, file_name, "sample.webm")
-        data = await self._t.json("POST", "/v1/voices", files=files, idempotency_key=idempotency_key)
-        return _one(m.Voice, data)
-
-    async def create_from_speaker(
-        self, *, recording_id: str, speaker: int, name: str, color: Optional[str] = None, library: Optional[bool] = None, idempotency_key: Optional[str] = None
-    ) -> m.Voice:
-        """Build a voice from one speaker of a recording (asserts permission).
-        ``library=False`` keeps it with that recording only."""
-        body = _body(
-            m.CreateVoiceFromSpeaker,
-            {"recording_id": recording_id, "speaker": speaker, "name": name, "color": color, "library": library, "consent": True},
-        )
-        data = await self._t.json("POST", "/v1/voices/from-speaker", json_body=body, idempotency_key=idempotency_key)
-        return _one(m.Voice, data)
-
-    async def set_consent(self, id: str, consent: str, *, name: Optional[str] = None) -> m.Voice:
-        """Record whether the speaker agreed to their clone: ``granted`` (with an
-        optional name, which also names the speaker in its recording) makes it
-        speak; ``refused`` deletes its audio and voice.  Automatic clones start
-        ``pending``."""
-        body = _body(m.SetConsent, {"consent": consent, "name": name})
-        return _one(m.Voice, await self._t.json("POST", f"/v1/voices/{_p(id)}/consent", json_body=body))
-
-    async def update(self, id: str, **fields: Any) -> m.Voice:
-        body = _body(m.PatchVoice, fields)
-        return _one(m.Voice, await self._t.json("PATCH", f"/v1/voices/{_p(id)}", json_body=body))
-
-    async def delete(self, id: str) -> None:
-        await self._t.json("DELETE", f"/v1/voices/{_p(id)}")
+    """``vs.voices``: the voices a language offers, and how each sounds."""
 
     async def available(
         self,
@@ -826,7 +755,111 @@ class Voices(_Group):
         )
         return resp.content
 
-    async def clone_preview(
+
+class Speakers(_Group):
+    """``vs.speakers``: the account's saved speakers, each with an optional
+    cloned voice (``voice``) built from their sample."""
+
+    async def list(self, *, lifecycle: Optional[str] = None) -> List[m.Speaker]:
+        return _many(m.Speaker, await self._t.json("GET", "/v1/speakers", query={"lifecycle": lifecycle}), "speakers")
+
+    async def get(self, id: str) -> m.Speaker:
+        return _one(m.Speaker, await self._t.json("GET", f"/v1/speakers/{_p(id)}"))
+
+    async def archive(self, id: str) -> m.Speaker:
+        """Put a speaker away: their voice stops speaking and they are unlinked from their appearances."""
+        return _one(m.Speaker, await self._t.json("POST", f"/v1/speakers/{_p(id)}/archive"))
+
+    async def restore(self, id: str) -> m.Speaker:
+        return _one(m.Speaker, await self._t.json("POST", f"/v1/speakers/{_p(id)}/restore"))
+
+    async def archive_many(self, ids: List[str]) -> m.ManyResult:
+        return _one(m.ManyResult, await self._t.json("POST", "/v1/speakers/archive", json_body={"ids": ids}))
+
+    async def restore_many(self, ids: List[str]) -> m.ManyResult:
+        return _one(m.ManyResult, await self._t.json("POST", "/v1/speakers/restore", json_body={"ids": ids}))
+
+    async def delete_many(self, ids: List[str]) -> m.ManyResult:
+        return _one(m.ManyResult, await self._t.json("POST", "/v1/speakers/delete", json_body={"ids": ids}))
+
+    async def create(
+        self,
+        name: str,
+        *,
+        sample: Optional[Upload] = None,
+        sample_url: Optional[str] = None,
+        file_name: Optional[str] = None,
+        gender: Optional[str] = None,
+        color: Optional[str] = None,
+        draft: Optional[bool] = None,
+        consent: Optional[bool] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> m.Speaker:
+        """Save a speaker from a sample or a link. Without ``consent`` they are
+        recognised only (``voice`` is ``None``); ``consent=True`` asserts you
+        have their permission and starts training their cloned voice."""
+        meta = _body(
+            m.CreateSpeaker,
+            {"name": name, "sample_url": sample_url, "gender": gender, "color": color, "draft": draft, "consent": consent},
+        )
+        files: Dict[str, Any] = {"meta": (None, json.dumps(meta), "application/json")}
+        if sample is not None:
+            files["sample"] = await asyncio.to_thread(_file_part, sample, file_name, "sample.webm")
+        data = await self._t.json("POST", "/v1/speakers", files=files, idempotency_key=idempotency_key)
+        return _one(m.Speaker, data)
+
+    async def create_from_appearance(
+        self,
+        *,
+        transcription_id: str,
+        appearance: int,
+        name: str,
+        recording_id: Optional[str] = None,
+        color: Optional[str] = None,
+        consent: Optional[bool] = None,
+        spans: Optional[List[Dict[str, float]]] = None,
+        draft: Optional[bool] = None,
+        library: Optional[bool] = None,
+        idempotency_key: Optional[str] = None,
+    ) -> m.Speaker:
+        """Save a speaker from one appearance of a transcription (``appearance``
+        is the ``speaker`` index of their lines). ``consent=True`` asserts
+        permission and clones their voice; ``library=False`` keeps them with
+        that transcription only."""
+        body = _body(
+            m.CreateSpeakerFromAppearance,
+            {
+                "transcription_id": transcription_id,
+                "recording_id": recording_id,
+                "appearance": appearance,
+                "name": name,
+                "color": color,
+                "consent": consent,
+                "spans": spans,
+                "draft": draft,
+                "library": library,
+            },
+        )
+        data = await self._t.json("POST", "/v1/speakers/from-appearance", json_body=body, idempotency_key=idempotency_key)
+        return _one(m.Speaker, data)
+
+    async def set_consent(self, id: str, consent: str, *, name: Optional[str] = None) -> m.Speaker:
+        """Record whether the speaker agreed to their clone: ``granted`` (with an
+        optional name) makes their voice speak; ``refused`` deletes its audio
+        and voice.  Automatic clones start ``pending``."""
+        body = _body(m.SetConsent, {"consent": consent, "name": name})
+        return _one(m.Speaker, await self._t.json("POST", f"/v1/speakers/{_p(id)}/consent", json_body=body))
+
+    async def update(self, id: str, **fields: Any) -> m.Speaker:
+        """Rename or recolour; ``enabled`` turns the cloned voice on or off;
+        ``consent=True`` on a speaker without a clone starts one from their sample."""
+        body = _body(m.PatchSpeaker, fields)
+        return _one(m.Speaker, await self._t.json("PATCH", f"/v1/speakers/{_p(id)}", json_body=body))
+
+    async def delete(self, id: str) -> None:
+        await self._t.json("DELETE", f"/v1/speakers/{_p(id)}")
+
+    async def voice_preview(
         self,
         id: str,
         *,
@@ -837,12 +870,12 @@ class Voices(_Group):
         share_code: Optional[str] = None,
         as_owner: bool = True,
     ) -> bytes:
-        """A cloned voice speaking ``lang``. With ``recording``, as it speaks
-        in that recording, for whoever may read it (its owner, or a listener
-        with ``listener_token`` or ``share_code``)."""
+        """The speaker's cloned voice speaking ``lang``. With ``recording``, as
+        it speaks in that recording, for whoever may read it (its owner, or a
+        listener with ``listener_token`` or ``share_code``)."""
         resp = await self._t.raw(
             "GET",
-            f"/v1/voices/{_p(id)}/preview",
+            f"/v1/speakers/{_p(id)}/preview",
             headers={"accept": "*/*"},
             query={**listener_query(listener_token, share_code), "lang": lang, "format": format, "recording": recording},
             anonymous=not as_owner,
@@ -850,7 +883,7 @@ class Voices(_Group):
         return resp.content
 
     async def sample(self, id: str) -> bytes:
-        resp = await self._t.raw("GET", f"/v1/voices/{_p(id)}/sample", headers={"accept": "*/*"})
+        resp = await self._t.raw("GET", f"/v1/speakers/{_p(id)}/sample", headers={"accept": "*/*"})
         return resp.content
 
 

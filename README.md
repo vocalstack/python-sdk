@@ -56,13 +56,13 @@ pip install vocalstack
 | recording | one take inside a broadcast or a transcription | `vs.recordings` |
 | job | a file or link recording's transcription work | `vs.jobs` |
 
-The other groups: `vs.corrections`, `vs.share_links`, `vs.voices`,
-`vs.search`, `vs.me`, `vs.languages`, `vs.rtmp`, `vs.events`, `vs.meta`.
+The other groups: `vs.corrections`, `vs.share_links`, `vs.speakers`,
+`vs.voices`, `vs.search`, `vs.me`, `vs.languages`, `vs.rtmp`, `vs.events`, `vs.meta`.
 Method names are the document's `operationId`s in snake_case
 (`broadcasts.start_recording` is `POST /v1/broadcasts/{id}/recordings`).
 Request fields are keyword arguments, in snake_case or the wire's camelCase
 (`settings={"spokenLanguage": "en"}`); lists return lists; binary answers
-(`recordings.export`, `recordings.clip`, `voices.sample`, ...) return bytes.
+(`recordings.export`, `recordings.clip`, `speakers.sample`, ...) return bytes.
 
 ```python
 VocalStack(

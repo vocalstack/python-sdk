@@ -140,6 +140,25 @@ class AppStreamKey(_Base):
     name: str
 
 
+class CloneRef(_Base):
+    id: str
+
+
+class AppearanceView(_Base):
+    gender: Optional[str] = None
+    gender_confidence: Optional[float] = Field(default=None, alias="genderConfidence")
+    identified: Optional[bool] = None
+    identified_confidence: Optional[float] = Field(default=None, alias="identifiedConfidence")
+    name: str
+    number: Optional[int] = None
+    returning: Optional[bool] = None
+    speaker: int
+    speaker_color: Optional[str] = Field(default=None, alias="speakerColor")
+    speaker_id: Optional[str] = Field(default=None, alias="speakerId")
+    speech_s: Optional[float] = Field(default=None, alias="speechS")
+    voice: Optional["CloneRef"] = None
+
+
 class AudioCapabilities(_Base):
     channels: List[int]
     encodings: List[AudioEncoding]
@@ -274,9 +293,9 @@ class Limits2(_Base):
     questions_per_day: Optional[int] = Field(default=None, alias="questionsPerDay")
     requests_per_min: Optional[int] = Field(default=None, alias="requestsPerMin")
     retention_audio_days: Optional[int] = Field(default=None, alias="retentionAudioDays")
+    retention_speakers_days: Optional[int] = Field(default=None, alias="retentionSpeakersDays")
     retention_transcriptions_days: Optional[int] = Field(default=None, alias="retentionTranscriptionsDays")
     retention_video_days: Optional[int] = Field(default=None, alias="retentionVideoDays")
-    retention_voices_days: Optional[int] = Field(default=None, alias="retentionVoicesDays")
     vector_searches_per_hour: Optional[int] = Field(default=None, alias="vectorSearchesPerHour")
 
 
@@ -632,6 +651,22 @@ class ClientPolicy(_Base):
     unsupported_below: Optional[str] = Field(default=None, alias="unsupportedBelow")
 
 
+class Clone(_Base):
+    """A speaker's cloned voice: the sound, built from the speaker's sample.
+Its id is the speaker's, so `clone:<id>` names it as a voice."""
+
+    disabled_at: Optional[str] = Field(default=None, alias="disabledAt")
+    enabled: bool
+    error: Optional[str] = None
+    id: str
+    preview_url: Optional[str] = Field(default=None, alias="previewUrl")
+    progress: int
+    sample_s: float = Field(alias="sampleS")
+    speech_s: Optional[float] = Field(default=None, alias="speechS")
+    state: str
+    uses: int
+
+
 class CommittedSegment(_Base):
     catchup: Optional[bool] = None
     confidence: Optional[float] = None
@@ -757,6 +792,32 @@ class CreateShareLink(_Base):
     label: str
 
 
+class CreateSpeaker(_Base):
+    color: Optional[str] = None
+    consent: Optional[bool] = None
+    draft: Optional[bool] = None
+    gender: Optional[str] = None
+    name: str
+    sample_url: Optional[str] = Field(default=None, alias="sampleUrl")
+
+
+class SampleSpan(_Base):
+    end: float
+    start: float
+
+
+class CreateSpeakerFromAppearance(_Base):
+    appearance: int
+    color: Optional[str] = None
+    consent: Optional[bool] = None
+    draft: Optional[bool] = None
+    library: Optional[bool] = None
+    name: str
+    recording_id: Optional[str] = Field(default=None, alias="recordingId")
+    spans: Optional[List["SampleSpan"]] = None
+    transcription_id: str = Field(alias="transcriptionId")
+
+
 class CreateTag(_Base):
     color: Optional[Literal["coral", "amber", "lime", "green", "teal", "blue", "violet", "pink"]] = None
     name: str
@@ -794,31 +855,6 @@ multipart upload whose `file` part carries the media."""
     share_link: Optional[bool] = Field(default=None, alias="shareLink")
     start_s: Optional[float] = Field(default=None, alias="startS")
     url: Optional[str] = None
-
-
-class CreateVoice(_Base):
-    color: Optional[str] = None
-    consent: Optional[bool] = None
-    draft: Optional[bool] = None
-    gender: Optional[str] = None
-    name: str
-    sample_url: Optional[str] = Field(default=None, alias="sampleUrl")
-
-
-class SampleSpan(_Base):
-    end: float
-    start: float
-
-
-class CreateVoiceFromSpeaker(_Base):
-    color: Optional[str] = None
-    consent: Optional[bool] = None
-    draft: Optional[bool] = None
-    library: Optional[bool] = None
-    name: str
-    recording_id: str = Field(alias="recordingId")
-    spans: Optional[List["SampleSpan"]] = None
-    speaker: int
 
 
 class CreatedAppStreamKey(_Base):
@@ -897,15 +933,14 @@ class JobQueue(_Base):
     reason: QueueReason
 
 
-class KnownVoice(_Base):
-    """One voice a realtime session may recognise a speaker as.
+class KnownSpeaker(_Base):
+    """One saved speaker a realtime session may recognise a speaker as.
 
-The `id` is a cloned voice's id; the engine loads its embedding from
-the same place it loads the voice itself, so a caller names the voice
-and never carries a vector over the wire.  `name` is what to call the
-person when they are recognised — the voice's own name, ordinarily,
-but the caller's to choose, because a voice called "Marcus —
-narration" belongs to a person called Marcus Reed."""
+The `id` is a saved speaker's id (`GET /v1/speakers`); the server
+supplies their fingerprint, so a caller names the speaker and never
+carries a vector over the wire.  `name` is what to call the person
+when they are recognised — the speaker's own name, ordinarily, but the
+caller's to choose."""
 
     color: Optional[str] = None
     id: str
@@ -1037,7 +1072,7 @@ model as context, with `mediaStart` to cite or play the moment."""
     text: str
 
 
-class PatchVoice(_Base):
+class PatchSpeaker(_Base):
     color: Optional[str] = None
     consent: Optional[bool] = None
     draft: Optional[bool] = None
@@ -1384,7 +1419,7 @@ class SessionStats(_Base):
 class SessionOptions(_Base):
     audio: Optional["AudioFormat"] = None
     events: Optional["EventOptions"] = None
-    identify_voices: Optional[List["KnownVoice"]] = Field(default=None, alias="identifyVoices")
+    identify_speakers: Optional[List["KnownSpeaker"]] = Field(default=None, alias="identifySpeakers")
     input: Optional["InputOptions"] = None
     latency_mode: Optional[LatencyMode] = Field(default=None, alias="latencyMode")
     sentences: Optional["SentenceOptions"] = None
@@ -1398,8 +1433,8 @@ class SessionOptions(_Base):
 
 
 class SetConsent(_Base):
-    """`POST /v1/voices/:id/consent`: the owner records whether the speaker
-agreed to their clone."""
+    """`POST /v1/speakers/{id}/consent`: the owner records whether the speaker
+agreed to have their voice cloned."""
 
     consent: Consent
     name: Optional[str] = None
@@ -1472,18 +1507,20 @@ plus job state to read from."""
     transcription_id: Optional[str] = Field(default=None, alias="transcriptionId")
 
 
-class SpeakerView(_Base):
+class Speaker(_Base):
+    archived_at: Optional[str] = Field(default=None, alias="archivedAt")
+    color: Optional[str] = None
+    consent: Consent
+    consent_at: Optional[str] = Field(default=None, alias="consentAt")
+    created_at: str = Field(alias="createdAt")
+    draft: bool
     gender: Optional[str] = None
-    gender_confidence: Optional[float] = Field(default=None, alias="genderConfidence")
-    identified: Optional[bool] = None
-    identified_confidence: Optional[float] = Field(default=None, alias="identifiedConfidence")
+    id: str
+    library: Optional[bool] = None
     name: str
-    number: Optional[int] = None
-    returning: Optional[bool] = None
-    speaker: int
-    speech_s: Optional[float] = Field(default=None, alias="speechS")
-    voice_color: Optional[str] = Field(default=None, alias="voiceColor")
-    voice_id: Optional[str] = Field(default=None, alias="voiceId")
+    recording_id: Optional[str] = Field(default=None, alias="recordingId")
+    updated_at: str = Field(alias="updatedAt")
+    voice: Optional["Clone"] = None
 
 
 class StartJob(_Base):
@@ -1551,7 +1588,7 @@ class TranscriptSnapshot(_Base):
     sentences: List["SentenceView"]
     spans: List["CaptureSpan"]
     speaker_labels: Optional[SpeakerLabels] = Field(default=None, alias="speakerLabels")
-    speakers: List["SpeakerView"]
+    speakers: List["AppearanceView"]
     state: RecordingState
     translation_pending: Optional[bool] = Field(default=None, alias="translationPending")
 
@@ -1725,32 +1762,6 @@ class VectorResults(_Base):
     state: str
 
 
-class Voice(_Base):
-    archived_at: Optional[str] = Field(default=None, alias="archivedAt")
-    auto: Optional[bool] = None
-    color: Optional[str] = None
-    consent: Consent
-    consent_at: Optional[str] = Field(default=None, alias="consentAt")
-    created_at: str = Field(alias="createdAt")
-    disabled_at: Optional[str] = Field(default=None, alias="disabledAt")
-    draft: bool
-    enabled: bool
-    error: Optional[str] = None
-    gender: Optional[str] = None
-    id: str
-    library: Optional[bool] = None
-    name: str
-    preview_url: Optional[str] = Field(default=None, alias="previewUrl")
-    progress: int
-    recording_id: Optional[str] = Field(default=None, alias="recordingId")
-    sample_s: float = Field(alias="sampleS")
-    speaker: Optional[int] = None
-    speech_s: Optional[float] = Field(default=None, alias="speechS")
-    state: str
-    updated_at: str = Field(alias="updatedAt")
-    uses: int
-
-
 class VoiceOption(_Base):
     accent: Optional[str] = None
     auto: Optional[bool] = None
@@ -1912,9 +1923,9 @@ class TranscriptSpeakerIdentified(_Base):
     confidence: Optional[float] = None
     name: str
     speaker: int
+    speaker_id: Optional[str] = Field(default=None, alias="speakerId")
     tone: Optional[bool] = None
     type: Literal["transcript.speakerIdentified"] = "transcript.speakerIdentified"
-    voice_id: Optional[str] = Field(default=None, alias="voiceId")
 
 
 class TranscriptSpeakerNumbers(_Base):
@@ -2108,8 +2119,8 @@ class TranscriptSpeakerIdentified(_Base):
     confidence: Optional[float] = None
     name: str
     speaker: int
+    speaker_id: Optional[str] = Field(default=None, alias="speakerId")
     type: Literal["transcript.speakerIdentified"] = "transcript.speakerIdentified"
-    voice_id: Optional[str] = Field(default=None, alias="voiceId")
 
 
 class TranscriptSpeakerNamed(_Base):
