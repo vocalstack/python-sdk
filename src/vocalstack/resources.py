@@ -150,6 +150,9 @@ class _ParentResource(_Group):
     async def list_share_links(self, id: str) -> List[m.ShareLink]:
         return _many(m.ShareLink, await self._t.json("GET", self._path(id, "/share-links")), "links")
 
+    async def list_scripts(self, id: str) -> List[m.Script]:
+        return _many(m.Script, await self._t.json("GET", self._path(id, "/scripts")), "scripts")
+
     async def create_share_link(self, id: str, **fields: Any) -> m.ShareLink:
         body = _body(m.CreateShareLink, fields)
         return _one(m.ShareLink, await self._t.json("POST", self._path(id, "/share-links"), json_body=body))
