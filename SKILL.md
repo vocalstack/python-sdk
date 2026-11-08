@@ -226,7 +226,7 @@ except VocalStackError as e:
 ## More
 
 - The other groups: `vs.transcriptions` (`list`, `get`, `update`, `archive`,
-  `restore`, `purge`, `list_share_links`, `create_share_link`), `vs.recordings`
+  `restore`, `purge`, `list_share_links`, `create_share_link`, `list_scripts`), `vs.recordings`
   (`get`, `summarize`, `summary`, `translation`, `audio_url`, `subscribe`),
   `vs.corrections`, `vs.share_links`, `vs.speakers`, `vs.voices`, `vs.broadcasts`,
   `vs.me` (`get`, `usage`), `vs.languages`, `vs.rtmp`, `vs.events`, `vs.meta`.

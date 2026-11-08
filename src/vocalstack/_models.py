@@ -1315,6 +1315,23 @@ class RtmpStatus(_Base):
     stream_key: Optional[str] = Field(default=None, alias="streamKey")
 
 
+class Script(_Base):
+    """The broadcast or transcription something belongs to (a script, a share
+link): exactly one of `broadcastId` and `transcriptionId` is set.
+Flattened into its owner."""
+
+    broadcast_id: Optional[str] = Field(default=None, alias="broadcastId")
+    created_at: str = Field(alias="createdAt")
+    id: str
+    locked: bool
+    recording_id: Optional[str] = Field(default=None, alias="recordingId")
+    scheduled_at: Optional[str] = Field(default=None, alias="scheduledAt")
+    text: str
+    transcription_id: Optional[str] = Field(default=None, alias="transcriptionId")
+    updated_at: str = Field(alias="updatedAt")
+    word_count: int = Field(alias="wordCount")
+
+
 class SearchHit(_Base):
     link_code: str = Field(alias="linkCode")
     link_name: str = Field(alias="linkName")
