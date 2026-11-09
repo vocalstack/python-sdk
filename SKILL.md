@@ -96,7 +96,7 @@ async def main(path):  # mp3, wav, flac, ogg, m4a, mp4 ...
             file=path,  # a path, bytes, or an open binary file
             settings={"spokenLanguage": "en", "speakerLabels": "on"},  # both optional; "auto" (default) | "on" | "off"
             # Off unless asked for: settings summary, title, summaryTranslations,
-            # voice (spoken translations), and share_link=True (a public share link).
+            # translationTts (text-to-speech of translations), and share_link=True (a public share link).
         )
         job = await vs.jobs.wait(tx.job.recording_id)
         if job.state != "done":
