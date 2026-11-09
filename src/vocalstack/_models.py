@@ -289,7 +289,7 @@ class Limits2(_Base):
     creates_per_hour: Optional[int] = Field(default=None, alias="createsPerHour")
     creates_per_hour_unpaid: Optional[int] = Field(default=None, alias="createsPerHourUnpaid")
     max_file_bytes: Optional[int] = Field(default=None, alias="maxFileBytes")
-    max_live_seconds: Optional[int] = Field(default=None, alias="maxLiveSeconds")
+    max_transcription_seconds: Optional[int] = Field(default=None, alias="maxTranscriptionSeconds")
     questions_per_day: Optional[int] = Field(default=None, alias="questionsPerDay")
     requests_per_min: Optional[int] = Field(default=None, alias="requestsPerMin")
     retention_audio_days: Optional[int] = Field(default=None, alias="retentionAudioDays")
@@ -496,7 +496,7 @@ design's settings sheet): what a recording made in it starts with."""
     summary: Optional[bool] = None
     summary_translations: Optional[bool] = Field(default=None, alias="summaryTranslations")
     title: Optional[bool] = None
-    voice: Optional[bool] = None
+    translation_tts: Optional[bool] = Field(default=None, alias="translationTts")
     voice_by_lang: Optional[Dict[str, str]] = Field(default=None, alias="voiceByLang")
     voice_cloning: Optional[bool] = Field(default=None, alias="voiceCloning")
     voice_cloning_consent: Optional[bool] = Field(default=None, alias="voiceCloningConsent")
@@ -837,7 +837,7 @@ class SettingsPatch(_Base):
     summary: Optional[bool] = None
     summary_translations: Optional[bool] = Field(default=None, alias="summaryTranslations")
     title: Optional[bool] = None
-    voice: Optional[bool] = None
+    translation_tts: Optional[bool] = Field(default=None, alias="translationTts")
     voice_by_lang: Optional[Dict[str, str]] = Field(default=None, alias="voiceByLang")
     voice_cloning: Optional[bool] = Field(default=None, alias="voiceCloning")
     voice_cloning_consent: Optional[bool] = Field(default=None, alias="voiceCloningConsent")
@@ -1810,6 +1810,7 @@ class VoiceTrack(_Base):
     duration_s: Optional[float] = Field(default=None, alias="durationS")
     error: Optional[str] = None
     lang: str
+    original: Optional[List[int]] = None
     state: str
     voice: Optional[str] = None
     voice_key: str = Field(alias="voiceKey")
