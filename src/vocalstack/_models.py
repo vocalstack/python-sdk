@@ -16,6 +16,8 @@ Access = Literal["public", "private"]
 
 ErrorCode = Literal["invalid_audio", "invalid_options", "invalid_token", "capacity_exceeded", "slow_consumer", "engine_unavailable", "internal", "session_expired", "engine_lost", "forbidden", "broadcast_archived", "not_found", "conflict", "invalid_state", "password_required", "rate_limited", "preview_pending", "language_unavailable", "suspended", "key_expired", "key_revoked", "key_from_browser", "insufficient_credit", "usage_cap_reached", "payment_method_required", "terms_acceptance_required", "payment_method_in_use", "billing_details_required", "promo_code_invalid", "auto_top_up_off", "range_too_long", "quota_exceeded", "idempotency_key_reused", "method_not_allowed", "payload_too_large", "unsupported_media_type", "invalid_body", "timeout", "language_limit_reached", "unavailable"]
 
+SampleWarning = Literal["overlaps", "noisy", "weak_voice", "unclear", "cut_off"]
+
 AudioEncoding = Literal["pcm_f32le"]
 
 FixKind = Literal["extension", "scheme", "page_stream"]
@@ -45,6 +47,8 @@ NotVoicedReason = Literal["rewrite"]
 DoneReason = Literal["eof", "max_duration", "cancelled"]
 
 ExportFormat = Literal["json", "srt", "xlsx", "pdf"]
+
+FileUploadState = Literal["uploading", "complete"]
 
 HealthStatus = Literal["ok"]
 
@@ -138,6 +142,40 @@ class AppStreamKey(_Base):
     live: bool
     masked_stream_key: str = Field(alias="maskedStreamKey")
     name: str
+
+
+class PickedSamples(_Base):
+    """Whether a set of samples holds enough speech to build a voice from."""
+
+    enough: bool
+    needed_s: float = Field(alias="neededS")
+    pitched_s: float = Field(alias="pitchedS")
+    seconds: float
+
+
+class SampleCandidate(_Base):
+    """One sentence of a speaker that a voice could be cloned from."""
+
+    chosen: bool
+    end: float
+    snr_db: Optional[float] = Field(default=None, alias="snrDb")
+    speech_s: Optional[float] = Field(default=None, alias="speechS")
+    start: float
+    text: str
+    voiced: Optional[float] = None
+    warning: Optional[SampleWarning] = None
+
+
+class AppearanceSamples(_Base):
+    """A speaker's sentences in one recording, judged as samples for a cloned
+voice, and the ones the server would use."""
+
+    appearance: int
+    chosen_s: float = Field(alias="chosenS")
+    chosen_speech_s: float = Field(alias="chosenSpeechS")
+    picked: Optional["PickedSamples"] = None
+    recording_id: str = Field(alias="recordingId")
+    samples: List["SampleCandidate"]
 
 
 class CloneRef(_Base):
@@ -289,7 +327,7 @@ class Limits2(_Base):
     creates_per_hour: Optional[int] = Field(default=None, alias="createsPerHour")
     creates_per_hour_unpaid: Optional[int] = Field(default=None, alias="createsPerHourUnpaid")
     max_file_bytes: Optional[int] = Field(default=None, alias="maxFileBytes")
-    max_live_seconds: Optional[int] = Field(default=None, alias="maxLiveSeconds")
+    max_transcription_seconds: Optional[int] = Field(default=None, alias="maxTranscriptionSeconds")
     questions_per_day: Optional[int] = Field(default=None, alias="questionsPerDay")
     requests_per_min: Optional[int] = Field(default=None, alias="requestsPerMin")
     retention_audio_days: Optional[int] = Field(default=None, alias="retentionAudioDays")
@@ -496,7 +534,7 @@ design's settings sheet): what a recording made in it starts with."""
     summary: Optional[bool] = None
     summary_translations: Optional[bool] = Field(default=None, alias="summaryTranslations")
     title: Optional[bool] = None
-    voice: Optional[bool] = None
+    translation_tts: Optional[bool] = Field(default=None, alias="translationTts")
     voice_by_lang: Optional[Dict[str, str]] = Field(default=None, alias="voiceByLang")
     voice_cloning: Optional[bool] = Field(default=None, alias="voiceCloning")
     voice_cloning_consent: Optional[bool] = Field(default=None, alias="voiceCloningConsent")
@@ -689,6 +727,15 @@ class CommittedSegment(_Base):
     words: List["Word"]
 
 
+class FileUploadedPart(_Base):
+    etag: str
+    number: int
+
+
+class CompleteFileUpload(_Base):
+    parts: List["FileUploadedPart"]
+
+
 class Correction(_Base):
     actor: "Actor"
     applied_at: str = Field(alias="appliedAt")
@@ -768,6 +815,12 @@ class CreateCheckout(_Base):
     waive_withdrawal: Optional[bool] = Field(default=None, alias="waiveWithdrawal")
 
 
+class CreateFileUpload(_Base):
+    bytes: int
+    mime: Optional[str] = None
+    name: str
+
+
 class CreateLiveTranscription(_Base):
     """`POST /v1/transcriptions/live`: a transcription captured as it is
 spoken — this device's microphone, or a stream the server pulls.
@@ -837,7 +890,7 @@ class SettingsPatch(_Base):
     summary: Optional[bool] = None
     summary_translations: Optional[bool] = Field(default=None, alias="summaryTranslations")
     title: Optional[bool] = None
-    voice: Optional[bool] = None
+    translation_tts: Optional[bool] = Field(default=None, alias="translationTts")
     voice_by_lang: Optional[Dict[str, str]] = Field(default=None, alias="voiceByLang")
     voice_cloning: Optional[bool] = Field(default=None, alias="voiceCloning")
     voice_cloning_consent: Optional[bool] = Field(default=None, alias="voiceCloningConsent")
@@ -854,6 +907,7 @@ multipart upload whose `file` part carries the media."""
     settings: Optional["SettingsPatch"] = None
     share_link: Optional[bool] = Field(default=None, alias="shareLink")
     start_s: Optional[float] = Field(default=None, alias="startS")
+    upload_id: Optional[str] = Field(default=None, alias="uploadId")
     url: Optional[str] = None
 
 
@@ -893,6 +947,23 @@ class DraftSegment(_Base):
 class EventOptions(_Base):
     drafts: Optional[bool] = None
     words: Optional[bool] = None
+
+
+class FileUploadPart(_Base):
+    bytes: int
+    number: int
+    url: str
+
+
+class FileUpload(_Base):
+    bytes: int
+    expires_at: str = Field(alias="expiresAt")
+    id: str
+    mime: Optional[str] = None
+    name: str
+    part_bytes: int = Field(alias="partBytes")
+    parts: Optional[List["FileUploadPart"]] = None
+    state: FileUploadState
 
 
 class Fix(_Base):
@@ -1810,6 +1881,7 @@ class VoiceTrack(_Base):
     duration_s: Optional[float] = Field(default=None, alias="durationS")
     error: Optional[str] = None
     lang: str
+    original: Optional[List[int]] = None
     state: str
     voice: Optional[str] = None
     voice_key: str = Field(alias="voiceKey")
@@ -1964,12 +2036,14 @@ class TranscriptTranslated(_Base):
 
 class TranscriptVoice(_Base):
     audio: Optional[str] = None
+    caf_url: Optional[str] = Field(default=None, alias="cafUrl")
     cloned: Optional[bool] = None
     duration_s: float = Field(alias="durationS")
     format: str
     generation: int
     lang: str
     latency_s: Optional[float] = Field(default=None, alias="latencyS")
+    ogg_url: Optional[str] = Field(default=None, alias="oggUrl")
     part: Optional[int] = None
     parts: Optional[int] = None
     queue_wait_s: Optional[float] = Field(default=None, alias="queueWaitS")
@@ -2175,6 +2249,16 @@ class JobProgress(_Base):
     type: Literal["job.progress"] = "job.progress"
 
 
+class SpeakerVoice(_Base):
+    error: Optional[str] = None
+    progress: int
+    recording_id: str = Field(alias="recordingId")
+    speaker: int
+    speaker_id: Optional[str] = Field(default=None, alias="speakerId")
+    state: str
+    type: Literal["speaker.voice"] = "speaker.voice"
+
+
 class StreamIngest(_Base):
     detected: Optional[str] = None
     error: Optional[str] = None
@@ -2205,7 +2289,7 @@ class SubscribeGap(_Base):
     type: Literal["subscribe.gap"] = "subscribe.gap"
 
 
-SubscriberFrame = Annotated[Union[SubscribeReady, RecordingState, RecordingSettings, RecordingSilence, RecordingExpiring, TranscriptCorrected, TranscriptSpeakerGender, TranscriptSpeakerIdentified, TranscriptSpeakerNamed, TranscriptSpeakerNumbers, RecordingStarted, JobProgress, StreamIngest, RecordingEnded, Audience, SubscribeGap], Field(discriminator="type")]
+SubscriberFrame = Annotated[Union[SubscribeReady, RecordingState, RecordingSettings, RecordingSilence, RecordingExpiring, TranscriptCorrected, TranscriptSpeakerGender, TranscriptSpeakerIdentified, TranscriptSpeakerNamed, TranscriptSpeakerNumbers, RecordingStarted, JobProgress, SpeakerVoice, StreamIngest, RecordingEnded, Audience, SubscribeGap], Field(discriminator="type")]
 
 SERVER_FRAME_TYPES = frozenset(["session.loading", "session.queued", "session.ready", "transcript.committed", "transcript.draft", "transcript.words", "transcript.amended", "transcript.latency", "transcript.speaker", "transcript.speakerGender", "transcript.speakerIdentified", "transcript.speakerNumbers", "transcript.sentence", "transcript.translated", "transcript.voice", "transcript.voiceStatus", "transcript.languageStatus", "transcript.retracted", "transcript.held", "transcript.progress", "stream.pull", "source.progress", "source.prepared", "session.done", "error"])
 

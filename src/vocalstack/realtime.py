@@ -55,6 +55,7 @@ def upgrade_refused(status: int, body: Optional[bytes]) -> VocalStackError:
 
 RESTART_CLOSE = 1012
 RESTART_TRIES = 3
+STEADY_S = 30.0
 MAX_PENDING_BYTES = 4 * 1024 * 1024
 
 
@@ -88,6 +89,7 @@ class RealtimeSession:
         self._ready_deadline_s = ready_deadline_s
         self._reconnecting = False
         self._reconnects = 0
+        self._opened_at = time.monotonic()
         self._pending: List[Union[str, bytes]] = []
         self._pending_bytes = 0
 
@@ -194,8 +196,12 @@ class RealtimeSession:
     async def _reconnect(self) -> None:
         """The relay restarting: open the same ``stream_url`` again (1, 2,
         4 s apart), send what waited, and go on as the same session.  Out
-        of tries: ``engine_lost``."""
+        of tries: ``engine_lost``.  A socket that stayed open ``STEADY_S``
+        before the restart close starts the tries anew, so a long session
+        goes through any number of restarts."""
         self._reconnecting = True
+        if time.monotonic() - self._opened_at >= STEADY_S:
+            self._reconnects = 0
         try:
             while self._reconnects < RESTART_TRIES and not self._closed and self._stream_url:
                 await asyncio.sleep(2 ** self._reconnects)
@@ -207,6 +213,7 @@ class RealtimeSession:
                         raise
                     continue
                 self._ws = ws
+                self._opened_at = time.monotonic()
                 self._reconnecting = False
                 waiting, self._pending, self._pending_bytes = self._pending, [], 0
                 for d in waiting:

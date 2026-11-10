@@ -7,9 +7,11 @@ local WebSocket server. No network:
 import asyncio
 import json
 import unittest
+from unittest import mock
 
 import websockets
 
+from vocalstack import realtime
 from vocalstack.errors import VocalStackError
 from vocalstack.realtime import RESTART_CLOSE, RealtimeSession
 
@@ -107,6 +109,33 @@ class RestartClose(unittest.TestCase):
         self.assertEqual(err.code, "engine_lost")
         self.assertIn("1012", str(err))
         self.assertEqual(len(conns), 4, "the first socket and three reconnects")
+
+    def test_sockets_that_stayed_up_start_the_tries_anew(self):
+        serve, conns = stream_server([(1, RESTART_CLOSE)] * 5)
+
+        async def attached(n):
+            while len(conns) < n:
+                await asyncio.sleep(0.02)
+            await asyncio.sleep(0.4)
+
+        async def go():
+            async with websockets.serve(serve, "127.0.0.1", 0) as server:
+                port = server.sockets[0].getsockname()[1]
+                session = await RealtimeSession.connect("s", f"ws://127.0.0.1:{port}/x", ready_deadline_s=2)
+                reader = asyncio.create_task(collect(session))
+                for i in range(1, 6):
+                    await attached(i)
+                    await session.send_audio(b"\0" * 64)
+                await attached(6)
+                await session.eof()
+                got, err = await asyncio.wait_for(reader, 30)
+                return err, session.done_reason
+
+        with mock.patch.object(realtime, "STEADY_S", 0.3):
+            err, reason = run(go())
+        self.assertIsNone(err, err)
+        self.assertEqual(len(conns), 6, "five restart closes, each after a steady socket")
+        self.assertEqual(reason, "eof")
 
     def test_any_other_close_is_engine_lost_at_once_no_reconnect(self):
         serve, conns = stream_server([(1, 1011)])

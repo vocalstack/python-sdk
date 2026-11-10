@@ -44,6 +44,7 @@ from .resources import (
     Speakers,
     Tags,
     Transcriptions,
+    Uploads,
     Voices,
 )
 from .realtime import DEFAULT_READY_DEADLINE_S
@@ -84,6 +85,7 @@ class VocalStack:
         self.realtime = Realtime(t, ready_deadline_s)
         self.broadcasts = Broadcasts(t)
         self.transcriptions = Transcriptions(t)
+        self.uploads = Uploads(t)
         self.recordings = Recordings(t, ready_deadline_s)
         self.jobs = Jobs(t)
         self.corrections = Corrections(t)

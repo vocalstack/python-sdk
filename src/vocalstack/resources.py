@@ -10,6 +10,7 @@ import os
 import time
 from typing import IO, TYPE_CHECKING, Any, Callable, Dict, List, Optional, Type, TypeVar, Union
 
+import httpx
 import websockets
 from pydantic import BaseModel
 
@@ -728,6 +729,76 @@ class Tags(_Group):
         return _one(m.Tag, await self._t.json("POST", f"/v1/tags/{_p(id)}/transcriptions", json_body=body))
 
 
+class Uploads(_Group):
+    """``vs.uploads``: files sent straight to storage in parts, then
+    transcribed with ``vs.transcriptions.create(upload_id=...)``."""
+
+    async def create(self, name: str, *, bytes: int, mime: Optional[str] = None) -> m.FileUpload:
+        body = _body(m.CreateFileUpload, {"name": name, "bytes": bytes, "mime": mime})
+        return _one(m.FileUpload, await self._t.json("POST", "/v1/uploads", json_body=body))
+
+    async def complete(self, id: str, parts: List[Dict[str, Any]]) -> m.FileUpload:
+        body = _body(m.CompleteFileUpload, {"parts": parts})
+        return _one(m.FileUpload, await self._t.json("POST", f"/v1/uploads/{_p(id)}/complete", json_body=body))
+
+    async def send(
+        self,
+        file: Upload,
+        *,
+        file_name: Optional[str] = None,
+        mime: Optional[str] = None,
+        concurrency: int = 4,
+        on_progress: Optional[Callable[[int, int], Any]] = None,
+    ) -> m.FileUpload:
+        """Create an upload, PUT every part to its link (no credential), and
+        complete it. A path is read a part at a time."""
+        path: Optional[str] = None
+        data: Optional[bytes] = None
+        if isinstance(file, (str, os.PathLike)):
+            path = os.fspath(file)
+            size = os.path.getsize(path)
+            name = file_name or os.path.basename(path)
+        else:
+            name, data = _file_part(file, file_name, "upload")
+            size = len(data)
+        up = await self.create(name, bytes=size, mime=mime)
+        sent: Dict[int, int] = {}
+        etags: Dict[int, str] = {}
+        gate = asyncio.Semaphore(max(1, concurrency))
+
+        def chunk(start: int, n: int) -> bytes:
+            if data is not None:
+                return data[start : start + n]
+            with open(path, "rb") as fh:  # type: ignore[arg-type]
+                fh.seek(start)
+                return fh.read(n)
+
+        async def one(part: m.FileUploadPart) -> None:
+            async with gate:
+                body = chunk((part.number - 1) * up.part_bytes, part.bytes)
+                for attempt in range(3):
+                    try:
+                        resp = await self._t.http.put(part.url, content=body)
+                    except httpx.TransportError:
+                        if attempt == 2:
+                            raise VocalStackError("unavailable", f"part {part.number} could not reach storage", retryable=True)
+                        continue
+                    if resp.status_code < 300:
+                        etag = resp.headers.get("etag")
+                        if not etag:
+                            raise VocalStackError("unavailable", f"part {part.number} was sent but storage gave no ETag")
+                        etags[part.number] = etag
+                        sent[part.number] = part.bytes
+                        if on_progress:
+                            on_progress(sum(sent.values()), size)
+                        return
+                    if resp.status_code < 500 or attempt == 2:
+                        raise VocalStackError("invalid_state", f"storage refused part {part.number} ({resp.status_code})")
+
+        await asyncio.gather(*(one(p) for p in (up.parts or [])))
+        return await self.complete(up.id, [{"number": n, "etag": e} for n, e in sorted(etags.items())])
+
+
 class Voices(_Group):
     """``vs.voices``: the voices a language offers, and how each sounds."""
 
@@ -845,6 +916,22 @@ class Speakers(_Group):
         )
         data = await self._t.json("POST", "/v1/speakers/from-appearance", json_body=body, idempotency_key=idempotency_key)
         return _one(m.Speaker, data)
+
+    async def appearance_samples(
+        self, *, transcription_id: str, appearance: int, recording_id: Optional[str] = None, spans: Optional[List[Dict[str, float]]] = None
+    ) -> m.AppearanceSamples:
+        """A speaker's sentences in a recording judged as samples for a cloned
+        voice, and the ones the server would use (``chosen``). Pass the
+        ``start``/``end`` of the ones you want as ``spans`` to
+        ``create_from_appearance``. With ``spans``, ``picked`` says whether
+        those samples hold enough clear speech to build a voice."""
+        picked = ",".join(f"{s['start']}-{s['end']}" for s in spans) if spans else None
+        data = await self._t.json(
+            "GET",
+            "/v1/speakers/from-appearance/samples",
+            query={"transcriptionId": transcription_id, "recordingId": recording_id, "appearance": appearance, "spans": picked},
+        )
+        return _one(m.AppearanceSamples, data)
 
     async def set_consent(self, id: str, consent: str, *, name: Optional[str] = None) -> m.Speaker:
         """Record whether the speaker agreed to their clone: ``granted`` (with an
