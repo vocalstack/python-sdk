@@ -54,6 +54,7 @@ def upgrade_refused(status: int, body: Optional[bytes]) -> VocalStackError:
 
 
 RESTART_CLOSE = 1012
+LOST_WAITS_S = [1.0, 2.0, 4.0, 8.0, 15.0, 15.0, 15.0, 15.0]
 RESTART_TRIES = 3
 STEADY_S = 30.0
 MAX_PENDING_BYTES = 4 * 1024 * 1024
@@ -129,7 +130,9 @@ class RealtimeSession:
         try:
             ws = await websockets.connect(stream_url, max_size=None, open_timeout=ready_deadline_s, close_timeout=2)
         except websockets.InvalidStatus as e:
-            raise upgrade_refused(e.response.status_code, e.response.body) from e
+            refused = upgrade_refused(e.response.status_code, e.response.body)
+            refused._answered = True
+            raise refused from e
         except TimeoutError as e:
             raise VocalStackError(
                 "capacity_exceeded", f"the upgrade was not answered within {ready_deadline_s}s", retryable=True
@@ -220,6 +223,36 @@ class RealtimeSession:
                     await self._send(d)
                 return
             raise engine_lost(RESTART_CLOSE)
+        finally:
+            self._reconnecting = False
+
+    async def _recover(self) -> None:
+        """The socket dropped with no close frame (the server it was on
+        stopped answering): open the same ``stream_url`` again, ``LOST_WAITS_S``
+        apart, for as long as the server answers "try again" (a retryable
+        refusal of the upgrade), send what waited, and go on as the same
+        session.  A refusal for good, no answer at all, or the last try
+        spent: ``engine_lost``, as before."""
+        self._reconnecting = True
+        try:
+            for wait in LOST_WAITS_S:
+                await asyncio.sleep(wait)
+                if self._closed or not self._stream_url:
+                    break
+                try:
+                    ws = await self._open_ready(self._stream_url, self._ready_deadline_s, self._on_frame)
+                except Exception as e:
+                    if isinstance(e, VocalStackError) and e.retryable and getattr(e, "_answered", False):
+                        continue
+                    break
+                self._ws = ws
+                self._opened_at = time.monotonic()
+                self._reconnecting = False
+                waiting, self._pending, self._pending_bytes = self._pending, [], 0
+                for d in waiting:
+                    await self._send(d)
+                return
+            raise engine_lost()
         finally:
             self._reconnecting = False
 
@@ -320,6 +353,13 @@ class RealtimeSession:
                     except VocalStackError as err:
                         self._error = err
                         raise
+                    continue
+                if e.rcvd is None and time.monotonic() - self._opened_at >= STEADY_S:
+                    try:
+                        await self._recover()
+                    except VocalStackError as err:
+                        self._error = err
+                        raise err from e
                     continue
                 self._error = engine_lost(e.rcvd.code if e.rcvd else None)
                 raise self._error from e

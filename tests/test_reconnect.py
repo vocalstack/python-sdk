@@ -154,5 +154,89 @@ class RestartClose(unittest.TestCase):
         self.assertEqual(len(conns), 1)
 
 
+def lost_server(answers):
+    """The first socket drops with no close frame once audio arrives; each
+    later upgrade gets ``answers[i]``: ``again`` (503, try again), ``gone``
+    (410), ``silent`` (the connection is cut), else it is served to its end."""
+    seen = {"upgrades": 0, "bytes": {}}
+
+    def answer(connection, request):
+        n = seen["upgrades"]
+        seen["upgrades"] += 1
+        connection.nth = n
+        how = "drop" if n == 0 else (answers[n - 1] if n - 1 < len(answers) else "serve")
+        connection.how = how
+        if how == "again":
+            return connection.respond(503, json.dumps({"code": "engine_unavailable", "message": "The connection to this session was lost and is being restored. Try again in a moment.", "data": {"retryable": True}}))
+        if how == "gone":
+            return connection.respond(410, json.dumps({"code": "session_expired", "message": "session token connect-by deadline has passed", "data": {"retryable": False}}))
+        if how == "silent":
+            connection.transport.abort()
+        return None
+
+    async def serve(ws):
+        seen["bytes"][ws.nth] = 0
+        await ws.send(json.dumps({"type": "session.ready", "sessionId": "s"}))
+        async for m in ws:
+            if isinstance(m, bytes):
+                seen["bytes"][ws.nth] += len(m)
+                if ws.how == "drop":
+                    ws.transport.abort()
+                    return
+                continue
+            if json.loads(m)["type"] == "eof":
+                await ws.send(json.dumps(DONE))
+                await ws.close()
+                return
+
+    return serve, answer, seen
+
+
+class LostSocket(unittest.TestCase):
+    def lose(self, answers, audio_after=None, steady_s=0.0):
+        serve, answer, seen = lost_server(answers)
+
+        async def go():
+            async with websockets.serve(serve, "127.0.0.1", 0, process_request=answer) as server:
+                port = server.sockets[0].getsockname()[1]
+                session = await RealtimeSession.connect("s", f"ws://127.0.0.1:{port}/x", ready_deadline_s=2)
+                reader = asyncio.create_task(collect(session))
+                await session.send_audio(b"\0" * 3200)
+                if audio_after:
+                    await asyncio.sleep(0.1)
+                    await session.send_audio(b"\0" * audio_after)
+                    await session.eof()
+                got, err = await asyncio.wait_for(reader, 20)
+                return err, session.done_reason
+
+        with mock.patch.object(realtime, "LOST_WAITS_S", [0.05, 0.05, 0.05, 0.05]), mock.patch.object(realtime, "STEADY_S", steady_s):
+            err, reason = run(go())
+        return err, reason, seen
+
+    def test_a_socket_lost_with_no_close_frame_soon_after_it_opened_is_engine_lost_with_no_try(self):
+        err, _, seen = self.lose(["serve"], steady_s=30.0)
+        self.assertEqual(err.code, "engine_lost")
+        self.assertEqual(seen["upgrades"], 1, "no reconnect for a socket that never stayed up")
+
+    def test_a_socket_lost_with_no_close_frame_is_opened_again_while_the_server_says_try_again(self):
+        err, reason, seen = self.lose(["again", "again"], audio_after=1600)
+        self.assertIsNone(err, err)
+        self.assertEqual(seen["upgrades"], 4, "two tries told to come back, then let in")
+        self.assertEqual(seen["bytes"][3], 1600, "the audio sent meanwhile reached the next socket")
+        self.assertEqual(reason, "eof")
+
+    def test_a_socket_lost_with_no_close_frame_ends_as_engine_lost_when_it_cannot_go_on(self):
+        for answers, upgrades, why in (
+            (["gone"], 2, "refused for good: the session ended on the server"),
+            (["silent"], 2, "no answer from the server"),
+            (["again"] * 4, 5, "told to come back past the last try"),
+        ):
+            with self.subTest(why):
+                err, _, seen = self.lose(answers)
+                self.assertIsNotNone(err, why)
+                self.assertEqual(err.code, "engine_lost", why)
+                self.assertEqual(seen["upgrades"], upgrades, why)
+
+
 if __name__ == "__main__":
     unittest.main()
