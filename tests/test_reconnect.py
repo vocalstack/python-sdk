@@ -213,10 +213,16 @@ class LostSocket(unittest.TestCase):
             err, reason = run(go())
         return err, reason, seen
 
-    def test_a_socket_lost_with_no_close_frame_soon_after_it_opened_is_engine_lost_with_no_try(self):
-        err, _, seen = self.lose(["serve"], steady_s=30.0)
+    def test_a_socket_lost_with_no_close_frame_soon_after_it_opened_is_opened_again_once(self):
+        err, reason, seen = self.lose(["serve"], audio_after=1600, steady_s=30.0)
+        self.assertIsNone(err, err)
+        self.assertEqual(seen["upgrades"], 2, "one try for a young socket")
+        self.assertEqual(reason, "eof")
+
+    def test_a_second_young_socket_lost_is_engine_lost_so_a_dropping_server_cannot_loop_the_client(self):
+        err, _, seen = self.lose(["drop"], audio_after=1600, steady_s=30.0)
         self.assertEqual(err.code, "engine_lost")
-        self.assertEqual(seen["upgrades"], 1, "no reconnect for a socket that never stayed up")
+        self.assertEqual(seen["upgrades"], 2, "one early try, then no more")
 
     def test_a_socket_lost_with_no_close_frame_is_opened_again_while_the_server_says_try_again(self):
         err, reason, seen = self.lose(["again", "again"], audio_after=1600)

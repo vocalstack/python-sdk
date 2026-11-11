@@ -57,6 +57,7 @@ RESTART_CLOSE = 1012
 LOST_WAITS_S = [1.0, 2.0, 4.0, 8.0, 15.0, 15.0, 15.0, 15.0]
 RESTART_TRIES = 3
 STEADY_S = 30.0
+EARLY_RECOVERIES = 1
 MAX_PENDING_BYTES = 4 * 1024 * 1024
 
 
@@ -91,6 +92,7 @@ class RealtimeSession:
         self._reconnecting = False
         self._reconnects = 0
         self._opened_at = time.monotonic()
+        self._early_recoveries = 0
         self._pending: List[Union[str, bytes]] = []
         self._pending_bytes = 0
 
@@ -354,7 +356,10 @@ class RealtimeSession:
                         self._error = err
                         raise
                     continue
-                if e.rcvd is None and time.monotonic() - self._opened_at >= STEADY_S:
+                young = time.monotonic() - self._opened_at < STEADY_S
+                if e.rcvd is None and (not young or self._early_recoveries < EARLY_RECOVERIES):
+                    if young:
+                        self._early_recoveries += 1
                     try:
                         await self._recover()
                     except VocalStackError as err:
