@@ -1516,7 +1516,6 @@ class SessionOptions(_Base):
     translate: Optional[List[str]] = None
     voice: Optional[List[str]] = None
     voice_by_lang: Optional[Dict[str, str]] = Field(default=None, alias="voiceByLang")
-    voice_cast: Optional[bool] = Field(default=None, alias="voiceCast")
     voice_cloning: Optional[bool] = Field(default=None, alias="voiceCloning")
 
 
