@@ -1874,6 +1874,7 @@ class VoiceCatalogue(_Base):
 
 
 class VoiceTrack(_Base):
+    chosen_for: Optional[List[str]] = Field(default=None, alias="chosenFor")
     clip_dur: Optional[Dict[str, float]] = Field(default=None, alias="clipDur")
     clip_parts: Optional[Dict[str, int]] = Field(default=None, alias="clipParts")
     clip_rev: Optional[Dict[str, str]] = Field(default=None, alias="clipRev")
