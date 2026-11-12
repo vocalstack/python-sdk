@@ -1051,7 +1051,8 @@ class Search(_Group):
 
 
 class Me(_Group):
-    """``vs.me``: who the credential is."""
+    """``vs.me``: who the credential is, and the workspace it works in
+    (``workspace``: ``id``, ``name``, ``personal``, ``iconUrl``)."""
 
     async def get(self) -> Dict[str, Any]:
         return await self._t.json("GET", "/v1/me")
