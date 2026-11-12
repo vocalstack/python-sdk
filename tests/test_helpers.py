@@ -118,7 +118,13 @@ class Queued(unittest.TestCase):
 
 class EngineLost(unittest.TestCase):
     def test_a_socket_that_closes_with_no_session_done_is_engine_lost_not_a_quiet_end(self):
+        opened = []
+
         async def serve(ws):
+            opened.append(1)
+            if len(opened) > 1:
+                ws.transport.abort()
+                return
             await ws.send(json.dumps({"type": "session.ready", "sessionId": "s1"}))
             await ws.send(json.dumps({"type": "transcript.committed", "segment": {"seq": 0, "start": 0, "end": 1, "text": "before the loss", "speaker": 0, "words": []}}))
             await asyncio.sleep(0.02)
