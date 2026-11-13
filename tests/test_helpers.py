@@ -1,4 +1,4 @@
-"""The helpers the reference's guides lean on: ``vs.jobs.wait``'s
+"""The helpers the reference's guides lean on: ``vs.transcriptions.wait_for_job``'s
 ``on_progress`` (against httpx.MockTransport) and a realtime socket's
 ``on_frame`` (against a local WebSocket server). No network:
 
@@ -21,7 +21,7 @@ def run(coro):
     return asyncio.run(coro)
 
 
-class JobsWait(unittest.TestCase):
+class WaitForJob(unittest.TestCase):
     def test_every_job_read_reaches_on_progress_the_last_one_included(self):
         states = [("queued", 0), ("transcribing", 40), ("done", 100)]
         calls = []
@@ -30,7 +30,6 @@ class JobsWait(unittest.TestCase):
             calls.append(request)
             state, pct = states[min(len(calls) - 1, len(states) - 1)]
             body = {
-                "recordingId": "r1",
                 "transcriptionId": "t1",
                 "state": state,
                 "attempts": 0,
@@ -44,7 +43,7 @@ class JobsWait(unittest.TestCase):
             http = httpx.AsyncClient(transport=httpx.MockTransport(handler))
             vs = VocalStack("http://api.test", api_key="vs_key_x", http=http)
             seen = []
-            job = await vs.jobs.wait("r1", interval_s=0, on_progress=lambda j: seen.append(f"{j.state}:{j.progress.pct}"))
+            job = await vs.transcriptions.wait_for_job("t1", interval_s=0, on_progress=lambda j: seen.append(f"{j.state}:{j.progress.pct}"))
             return job, seen
 
         job, seen = run(go())

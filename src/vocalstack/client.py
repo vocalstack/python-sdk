@@ -6,8 +6,8 @@
     async def main():
         async with VocalStack(api_key=os.environ["VOCALSTACK_API_KEY"]) as vs:
             tx = await vs.transcriptions.create(url="https://example.com/talk.mp3")
-            job = await vs.jobs.wait(tx.job.recording_id)
-            snap = await vs.recordings.transcript(job.recording_id)
+            await vs.transcriptions.wait_for_job(tx.id)
+            snap = await vs.transcriptions.transcript(tx.id)
             print(" ".join(s.text for s in snap.sentences))
 
     asyncio.run(main())
@@ -15,8 +15,8 @@
 What is what: a realtime session is a signed token plus one socket,
 nothing stored (``vs.realtime``); a broadcast is the link listeners open;
 a transcription is a file, link, microphone or stream transcribed and
-stored; a recording is one take inside either; a job is a file or link
-recording's transcription work.
+stored, one continuous transcript however often a live one is paused;
+a job is a file or link transcription's work.
 """
 
 from __future__ import annotations
@@ -33,14 +33,13 @@ from .resources import (
     Connect,
     Corrections,
     Events,
-    Jobs,
     Languages,
     Me,
     Meta,
-    Recordings,
     Rtmp,
     Search,
     ShareLinks,
+    SpeakerInvites,
     Speakers,
     Tags,
     Transcriptions,
@@ -84,14 +83,13 @@ class VocalStack:
         self.base_url = t.base_url
         self.realtime = Realtime(t, ready_deadline_s)
         self.broadcasts = Broadcasts(t)
-        self.transcriptions = Transcriptions(t)
+        self.transcriptions = Transcriptions(t, ready_deadline_s)
         self.uploads = Uploads(t)
-        self.recordings = Recordings(t, ready_deadline_s)
-        self.jobs = Jobs(t)
         self.corrections = Corrections(t)
         self.share_links = ShareLinks(t)
         self.tags = Tags(t)
         self.speakers = Speakers(t)
+        self.speaker_invites = SpeakerInvites(t)
         self.voices = Voices(t)
         self.search = Search(t)
         self.me = Me(t)

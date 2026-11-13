@@ -26,7 +26,7 @@ SourceProblem = Literal["not_found", "refused", "server_error", "unknown_host", 
 
 AudioSourceState = Literal["ready", "error"]
 
-RecordingState = Literal["pending", "live", "paused", "processing", "ended", "finalized"]
+TranscriptionState = Literal["idle", "pending", "live", "paused", "processing", "ended", "finalized"]
 
 Lifecycle = Literal["active", "archived", "purged"]
 
@@ -56,6 +56,8 @@ IngestState = Literal["connecting", "streaming", "reconnecting", "stopped", "fai
 
 InputKind = Literal["live", "file", "url", "stream"]
 
+InviteState = Literal["pending", "expired"]
+
 QueueReason = Literal["concurrency"]
 
 JobState = Literal["queued", "fetching", "transcribing", "done", "failed", "cropping", "stopped"]
@@ -68,11 +70,11 @@ ProbeReason = Literal["web_page", "site_not_fetched", "meeting", "not_found", "u
 
 LoadingStage = Literal["download", "model"]
 
-RecordingKind = Literal["live", "upload"]
-
 SourceKind = Literal["file", "url"]
 
 PullState = Literal["connecting", "streaming", "reconnecting", "failed"]
+
+RecordingState = Literal["pending", "live", "paused", "processing", "ended", "finalized"]
 
 SentenceStatus = Literal["open", "closed", "dropped"]
 
@@ -174,8 +176,8 @@ voice, and the ones the server would use."""
     chosen_s: float = Field(alias="chosenS")
     chosen_speech_s: float = Field(alias="chosenSpeechS")
     picked: Optional["PickedSamples"] = None
-    recording_id: str = Field(alias="recordingId")
     samples: List["SampleCandidate"]
+    transcription_id: str = Field(alias="transcriptionId")
 
 
 class CloneRef(_Base):
@@ -212,8 +214,8 @@ class AudioFormat(_Base):
 class AudioSource(_Base):
     """A stream a broadcast can record from (`Broadcast.audioSources`, design
 78): a YouTube live or an internet radio address kept with the
-broadcast.  `POST /v1/broadcasts/{id}/recordings` with `audioSource` set
-to its id starts a recording of it."""
+broadcast.  `POST /v1/broadcasts/{id}/record` with `audioSource` set
+to its id records it in a new live transcription."""
 
     id: str
     name: str
@@ -488,28 +490,25 @@ class Blocked(_Base):
     reason: str
 
 
-class CurrentRecording(_Base):
-    """The recording in flight (`currentRecording`): on a transcription, its
-open recording; on a broadcast, the open recording
-of a live transcription feeding it, which is what its listeners are sent."""
+class CurrentTranscription(_Base):
+    """The transcription a broadcast's link is showing now
+(`Broadcast.currentTranscription`): a live transcription feeding it,
+while it records."""
 
-    recording_id: str = Field(alias="recordingId")
     started_at: Optional[str] = Field(default=None, alias="startedAt")
-    state: RecordingState
-    transcription_id: Optional[str] = Field(default=None, alias="transcriptionId")
+    state: TranscriptionState
+    transcription_id: str = Field(alias="transcriptionId")
 
 
-class LastRecording(_Base):
-    """A live transcription's newest recording (`lastRecording`): what
-its row in a list reads from — how long it ran, when, and whether it is
-still running — and the recording a tap on that row opens."""
+class LastTranscription(_Base):
+    """The newest transcription among those feeding a broadcast
+(`Broadcast.lastTranscription`)."""
 
     duration_s: Optional[float] = Field(default=None, alias="durationS")
-    recording_id: str = Field(alias="recordingId")
     started_at: Optional[str] = Field(default=None, alias="startedAt")
-    state: RecordingState
+    state: TranscriptionState
     title: Optional[str] = None
-    transcription_id: Optional[str] = Field(default=None, alias="transcriptionId")
+    transcription_id: str = Field(alias="transcriptionId")
 
 
 class ConfidencePolicy(_Base):
@@ -554,28 +553,28 @@ class TranscriptionRef(_Base):
 class Broadcast(_Base):
     """A broadcast: the link listeners open (`code`), fed by the live
 transcriptions attached to it (`transcriptions`) or recording one of
-its own audio sources (`audioSources`). Its recordings are made in
-those live transcriptions."""
+its own audio sources (`audioSources`). Recording it makes a new live
+transcription each time."""
 
     access: Access
     archived_at: Optional[str] = Field(default=None, alias="archivedAt")
     audio_sources: Optional[List["AudioSource"]] = Field(default=None, alias="audioSources")
     code: str
     created_at: str = Field(alias="createdAt")
-    current_recording: Optional["CurrentRecording"] = Field(default=None, alias="currentRecording")
+    current_transcription: Optional["CurrentTranscription"] = Field(default=None, alias="currentTranscription")
     id: str
     kind: Literal["broadcast"] = "broadcast"
     last_recorded_at: Optional[str] = Field(default=None, alias="lastRecordedAt")
-    last_recording: Optional["LastRecording"] = Field(default=None, alias="lastRecording")
+    last_transcription: Optional["LastTranscription"] = Field(default=None, alias="lastTranscription")
     lifecycle: Lifecycle
     listeners_now: Optional[int] = Field(default=None, alias="listenersNow")
     name: str
     owner_principal_id: str = Field(alias="ownerPrincipalId")
     purge_after: Optional[str] = Field(default=None, alias="purgeAfter")
-    recording_count: int = Field(alias="recordingCount")
     settings: "Settings"
     share_url: str = Field(alias="shareUrl")
     source: "CaptureSource"
+    transcription_count: int = Field(alias="transcriptionCount")
     transcriptions: Optional[List["TranscriptionRef"]] = None
     updated_at: str = Field(alias="updatedAt")
 
@@ -586,6 +585,7 @@ class BroadcastRef(_Base):
     access: Access
     code: str
     id: str
+    made: Optional[bool] = None
     name: str
     share_url: str = Field(alias="shareUrl")
 
@@ -615,7 +615,7 @@ class CaptureSpan(_Base):
     wall_start: float = Field(alias="wallStart")
 
 
-class RecordingCharge(_Base):
+class TranscriptionCharge(_Base):
     """A charge on the wire (`GET /v1/billing/charges`)."""
 
     amount: float
@@ -626,7 +626,6 @@ class RecordingCharge(_Base):
     name: Optional[str] = None
     opened_at: str = Field(alias="openedAt")
     rate_per_hour: float = Field(alias="ratePerHour")
-    recording_id: str = Field(alias="recordingId")
     seconds_billed: float = Field(alias="secondsBilled")
     settled_at: Optional[str] = Field(default=None, alias="settledAt")
     state: str
@@ -636,7 +635,7 @@ class RecordingCharge(_Base):
 class ChargePage(_Base):
     """`GET /v1/billing/charges`."""
 
-    charges: List["RecordingCharge"]
+    charges: List["TranscriptionCharge"]
     next_cursor: Optional[str] = Field(default=None, alias="nextCursor")
 
 
@@ -772,7 +771,7 @@ class CorrectionBatch(_Base):
 
 
 class CorrectionPage(_Base):
-    """`GET /v1/recordings/{id}/corrections`: one page, newest first."""
+    """`GET /v1/transcriptions/{id}/corrections`: one page, newest first."""
 
     corrections: List["Correction"]
     next_cursor: Optional[str] = Field(default=None, alias="nextCursor")
@@ -824,7 +823,7 @@ class CreateFileUpload(_Base):
 class CreateLiveTranscription(_Base):
     """`POST /v1/transcriptions/live`: a transcription captured as it is
 spoken — this device's microphone, or a stream the server pulls.
-It is created idle; `POST /v1/transcriptions/{id}/recordings` starts it."""
+It is created idle; `POST /v1/transcriptions/{id}/start` starts it."""
 
     broadcasts: Optional[List[str]] = None
     name: str
@@ -866,9 +865,15 @@ class CreateSpeakerFromAppearance(_Base):
     draft: Optional[bool] = None
     library: Optional[bool] = None
     name: str
-    recording_id: Optional[str] = Field(default=None, alias="recordingId")
     spans: Optional[List["SampleSpan"]] = None
     transcription_id: str = Field(alias="transcriptionId")
+
+
+class CreateSpeakerInvite(_Base):
+    color: Optional[str] = None
+    email: Optional[str] = None
+    gender: Optional[str] = None
+    name: str
 
 
 class CreateTag(_Base):
@@ -978,6 +983,15 @@ class Health(_Base):
     status: HealthStatus
 
 
+class HistoryEvent(_Base):
+    """One durable frame of a transcription, as the host's screen received it."""
+
+    at: str
+    kind: str
+    payload: Any
+    seq: int
+
+
 class InputOptions(_Base):
     crop: Optional["CropRange"] = None
     kind: Optional[InputKind] = None
@@ -1038,7 +1052,7 @@ class LanguageLists(_Base):
 
 
 class LanguageMismatch(_Base):
-    """`Recording.languageMismatches`: a stretch where the speech was not the
+    """`Transcription.languageMismatches`: a stretch where the speech was not the
 pinned spoken language."""
 
     confidence: Optional[float] = None
@@ -1059,9 +1073,9 @@ class LedgerEntry(_Base):
     metadata: Any
     provider_order_id: Optional[str] = Field(default=None, alias="providerOrderId")
     realtime_session_id: Optional[str] = Field(default=None, alias="realtimeSessionId")
-    recording_id: Optional[str] = Field(default=None, alias="recordingId")
     staff_user: Optional[str] = Field(default=None, alias="staffUser")
     subscription_id: Optional[str] = Field(default=None, alias="subscriptionId")
+    transcription_id: Optional[str] = Field(default=None, alias="transcriptionId")
 
 
 class LedgerPage(_Base):
@@ -1132,6 +1146,17 @@ class MediaSummary(_Base):
 
 class NameSpeaker(_Base):
     name: Optional[str] = None
+
+
+class OpenSpeakerInvite(_Base):
+    email: Optional[str] = None
+    expired: bool
+    expires_at: str = Field(alias="expiresAt")
+    inviter_name: str = Field(alias="inviterName")
+    max_seconds: float = Field(alias="maxSeconds")
+    min_seconds: float = Field(alias="minSeconds")
+    read_text: str = Field(alias="readText")
+    speaker_name: str = Field(alias="speakerName")
 
 
 class Passage(_Base):
@@ -1248,8 +1273,8 @@ class PromoCodeView(_Base):
 
 
 class StreamIngest(_Base):
-    """The server-side publisher of a stream source's recording, on the
-`Recording` DTO as `ingest`."""
+    """The server-side publisher of a stream source, on
+`Transcription.ingest`."""
 
     attempts: int
     bytes_in: int = Field(alias="bytesIn")
@@ -1265,20 +1290,6 @@ class StreamIngest(_Base):
     stream_started_at: Optional[str] = Field(default=None, alias="streamStartedAt")
     updated_at: str = Field(alias="updatedAt")
     url: str
-
-
-class RecordingMetrics(_Base):
-    settle_p50_s: Optional[float] = Field(default=None, alias="settleP50S")
-    settle_p95_s: Optional[float] = Field(default=None, alias="settleP95S")
-    silence_paused: int = Field(alias="silencePaused")
-    suppressed_segments: Optional[int] = Field(default=None, alias="suppressedSegments")
-    translation_latency_p50_s: Optional[float] = Field(default=None, alias="translationLatencyP50S")
-
-
-class PublisherInfo(_Base):
-    attached: bool
-    lease_expires_at: Optional[str] = Field(default=None, alias="leaseExpiresAt")
-    machine_id: Optional[str] = Field(default=None, alias="machineId")
 
 
 class SourceInfo(_Base):
@@ -1297,70 +1308,107 @@ class SourceInfo(_Base):
     url: Optional[str] = None
 
 
-class Recording(_Base):
+class TranscriptionJob(_Base):
+    attempts: int
     created_at: str = Field(alias="createdAt")
+    crop: Optional["CropWindow"] = None
+    error: Optional[str] = None
+    error_code: Optional[str] = Field(default=None, alias="errorCode")
+    finished_at: Optional[str] = Field(default=None, alias="finishedAt")
+    has_audio: bool = Field(alias="hasAudio")
+    has_video: Optional[bool] = Field(default=None, alias="hasVideo")
+    peaks: Optional[List[float]] = None
+    preview: Optional[bool] = None
+    progress: "JobProgress"
+    queue: Optional["JobQueue"] = None
+    source: Optional["SourceInfo"] = None
+    started_at: Optional[str] = Field(default=None, alias="startedAt")
+    state: JobState
+    transcription_id: str = Field(alias="transcriptionId")
+
+
+class TranscriptionMetrics(_Base):
+    settle_p50_s: Optional[float] = Field(default=None, alias="settleP50S")
+    settle_p95_s: Optional[float] = Field(default=None, alias="settleP95S")
+    silence_paused: int = Field(alias="silencePaused")
+    suppressed_segments: Optional[int] = Field(default=None, alias="suppressedSegments")
+    translation_latency_p50_s: Optional[float] = Field(default=None, alias="translationLatencyP50S")
+
+
+class PublisherInfo(_Base):
+    attached: bool
+    lease_expires_at: Optional[str] = Field(default=None, alias="leaseExpiresAt")
+    machine_id: Optional[str] = Field(default=None, alias="machineId")
+
+
+class TagRef(_Base):
+    """A tag as a transcription lists it."""
+
+    color: Literal["coral", "amber", "lime", "green", "teal", "blue", "violet", "pink"]
+    id: str
+    name: str
+
+
+class Transcription(_Base):
+    """A transcription: a file, a link (with its `transcription` job), or
+something captured as it is spoken (`live: true`: a microphone, a
+stream, an RTMP encoder), which may feed broadcasts (`broadcasts`)."""
+
+    archived_at: Optional[str] = Field(default=None, alias="archivedAt")
+    blocked: Optional["Blocked"] = None
+    broadcasts: Optional[List["BroadcastRef"]] = None
+    code: str
+    created_at: str = Field(alias="createdAt")
+    created_by_api_key_id: Optional[str] = Field(default=None, alias="createdByApiKeyId")
+    duration_s: Optional[float] = Field(default=None, alias="durationS")
     end_reason: Optional[str] = Field(default=None, alias="endReason")
     ended_at: Optional[str] = Field(default=None, alias="endedAt")
     finalized_at: Optional[str] = Field(default=None, alias="finalizedAt")
     id: str
     ingest: Optional["StreamIngest"] = None
-    kind: RecordingKind
+    job: Optional["TranscriptionJob"] = None
+    kind: Literal["transcription"] = "transcription"
     language_mismatches: Optional[List["LanguageMismatch"]] = Field(default=None, alias="languageMismatches")
-    last_seq: int = Field(alias="lastSeq")
+    last_seq: Optional[int] = Field(default=None, alias="lastSeq")
     lifecycle: Lifecycle
-    max_duration_s: int = Field(alias="maxDurationS")
-    max_pause_s: int = Field(alias="maxPauseS")
-    media: List["MediaSummary"]
-    media_duration_s: Optional[float] = Field(default=None, alias="mediaDurationS")
-    metrics: Optional["RecordingMetrics"] = None
+    live: Optional[bool] = None
+    locked: Optional[bool] = None
+    max_duration_s: Optional[int] = Field(default=None, alias="maxDurationS")
+    max_pause_s: Optional[int] = Field(default=None, alias="maxPauseS")
+    media: Optional[List["MediaSummary"]] = None
+    metrics: Optional["TranscriptionMetrics"] = None
+    name: str
+    origin: Literal["dashboard", "api", "extension", "desktop_app", "obs", "wordpress", "payload", "strapi", "sanity", "contentful", "mcp", "broadcast", "unknown"]
+    owner_principal_id: str = Field(alias="ownerPrincipalId")
     peak_latency_s: Optional[float] = Field(default=None, alias="peakLatencyS")
     peak_listeners: Optional[int] = Field(default=None, alias="peakListeners")
-    publisher: "PublisherInfo"
+    publisher: Optional["PublisherInfo"] = None
+    purge_after: Optional[str] = Field(default=None, alias="purgeAfter")
     script_id: Optional[str] = Field(default=None, alias="scriptId")
     script_text: Optional[str] = Field(default=None, alias="scriptText")
     settings: "Settings"
-    source: Optional["SourceInfo"] = None
-    spans: List["CaptureSpan"]
+    share_code: Optional[str] = Field(default=None, alias="shareCode")
+    share_url: str = Field(alias="shareUrl")
+    source: "CaptureSource"
+    spans: Optional[List["CaptureSpan"]] = None
     speaker_count: Optional[int] = Field(default=None, alias="speakerCount")
     spoken_language: Optional[str] = Field(default=None, alias="spokenLanguage")
     started_at: Optional[str] = Field(default=None, alias="startedAt")
-    state: RecordingState
+    state: TranscriptionState
     summarized_at: Optional[str] = Field(default=None, alias="summarizedAt")
     summary: Optional[str] = None
     summary_language: Optional[str] = Field(default=None, alias="summaryLanguage")
+    tags: Optional[List["TagRef"]] = None
     title: Optional[str] = None
-    transcription_id: str = Field(alias="transcriptionId")
+    updated_at: str = Field(alias="updatedAt")
     wall_duration_s: Optional[float] = Field(default=None, alias="wallDurationS")
 
 
 class PublishGrant(_Base):
     expires_at: Optional[str] = Field(default=None, alias="expiresAt")
-    recording: "Recording"
     session_id: Optional[str] = Field(default=None, alias="sessionId")
     stream_url: Optional[str] = Field(default=None, alias="streamUrl")
-
-
-class RecordingEvent(_Base):
-    """One durable frame of a recording, as the host's screen received it."""
-
-    at: str
-    kind: str
-    payload: Any
-    seq: int
-
-
-class RecordingEvents(_Base):
-    """`GET /v1/recordings/{id}/events`: one page of the log, in order."""
-
-    events: List["RecordingEvent"]
-    next_cursor: Optional[str] = Field(default=None, alias="nextCursor")
-
-
-class RecordingPage(_Base):
-    """A broadcast's or a transcription's recordings, one page, newest first."""
-
-    next_cursor: Optional[str] = Field(default=None, alias="nextCursor")
-    recordings: List["Recording"]
+    transcription: "Transcription"
 
 
 class RetranscribeLine(_Base):
@@ -1395,8 +1443,8 @@ Flattened into its owner."""
     created_at: str = Field(alias="createdAt")
     id: str
     locked: bool
-    recording_id: Optional[str] = Field(default=None, alias="recordingId")
     scheduled_at: Optional[str] = Field(default=None, alias="scheduledAt")
+    started_transcription_id: Optional[str] = Field(default=None, alias="startedTranscriptionId")
     text: str
     transcription_id: Optional[str] = Field(default=None, alias="transcriptionId")
     updated_at: str = Field(alias="updatedAt")
@@ -1409,7 +1457,6 @@ class SearchHit(_Base):
     live: bool
     media_start: float = Field(alias="mediaStart")
     recorded_at: Optional[str] = Field(default=None, alias="recordedAt")
-    recording_id: str = Field(alias="recordingId")
     rendered: Optional[str] = None
     score: float
     sentence_id: int = Field(alias="sentenceId")
@@ -1556,30 +1603,10 @@ Flattened into its owner."""
     views: int
 
 
-class TranscriptionJob(_Base):
-    attempts: int
-    created_at: str = Field(alias="createdAt")
-    crop: Optional["CropWindow"] = None
-    error: Optional[str] = None
-    error_code: Optional[str] = Field(default=None, alias="errorCode")
-    finished_at: Optional[str] = Field(default=None, alias="finishedAt")
-    has_audio: bool = Field(alias="hasAudio")
-    has_video: Optional[bool] = Field(default=None, alias="hasVideo")
-    peaks: Optional[List[float]] = None
-    preview: Optional[bool] = None
-    progress: "JobProgress"
-    queue: Optional["JobQueue"] = None
-    recording_id: str = Field(alias="recordingId")
-    source: Optional["SourceInfo"] = None
-    started_at: Optional[str] = Field(default=None, alias="startedAt")
-    state: JobState
-    transcription_id: str = Field(alias="transcriptionId")
-
-
 class SharedTranscript(_Base):
     """What the public page learns from a code: the transcript's name, who
-shared it (display name only), what the link allows, and the recording
-plus job state to read from."""
+shared it (display name only), what the link allows, and the
+transcription (with its job) to read from."""
 
     allow_download: bool = Field(alias="allowDownload")
     allow_export: bool = Field(alias="allowExport")
@@ -1589,8 +1616,8 @@ plus job state to read from."""
     created_at: str = Field(alias="createdAt")
     job: Optional["TranscriptionJob"] = None
     name: str
-    recording: "Recording"
     shared_by: str = Field(alias="sharedBy")
+    transcription: "Transcription"
     transcription_id: Optional[str] = Field(default=None, alias="transcriptionId")
 
 
@@ -1605,13 +1632,33 @@ class Speaker(_Base):
     id: str
     library: Optional[bool] = None
     name: str
-    recording_id: Optional[str] = Field(default=None, alias="recordingId")
+    transcription_id: Optional[str] = Field(default=None, alias="transcriptionId")
     updated_at: str = Field(alias="updatedAt")
     voice: Optional["Clone"] = None
 
 
+class SpeakerConsentWithdrawal(_Base):
+    inviter_name: str = Field(alias="inviterName")
+    speaker_name: str = Field(alias="speakerName")
+    withdrawn: bool
+
+
+class SpeakerInvite(_Base):
+    created_at: str = Field(alias="createdAt")
+    email: Optional[str] = None
+    expires_at: str = Field(alias="expiresAt")
+    id: str
+    speaker_id: str = Field(alias="speakerId")
+    state: InviteState
+    url: Optional[str] = None
+
+
+class SpeakerInviteList(_Base):
+    invites: List["SpeakerInvite"]
+
+
 class StartJob(_Base):
-    """`POST /v1/recordings/{id}/job/start`: the window a job in
+    """`POST /v1/transcriptions/{id}/job/start`: the window a job in
 `cropping` should transcribe.  Both bounds optional: the start of the
 file and its end."""
 
@@ -1619,7 +1666,7 @@ file and its end."""
     start_s: Optional[float] = Field(default=None, alias="startS")
 
 
-class StartRecording(_Base):
+class StartLiveTranscription(_Base):
     audio_source: Optional[str] = Field(default=None, alias="audioSource")
     device_id: Optional[str] = Field(default=None, alias="deviceId")
     script_id: Optional[str] = Field(default=None, alias="scriptId")
@@ -1632,8 +1679,13 @@ class StopRequest(_Base):
     reason: Optional[str] = None
 
 
+class SubmitSpeakerInvite(_Base):
+    consent: bool
+    email: Optional[str] = None
+
+
 class SummaryStatus(_Base):
-    """Where a recording's summary stands, for `POST /v1/recordings/:id/summarize`."""
+    """Where a recording's summary stands, for `POST /v1/transcriptions/:id/summarize`."""
 
     lang: Optional[str] = None
     state: str
@@ -1652,14 +1704,6 @@ class TagList(_Base):
     tags: List["Tag"]
 
 
-class TagRef(_Base):
-    """A tag as a transcription lists it."""
-
-    color: Literal["coral", "amber", "lime", "green", "teal", "blue", "violet", "pink"]
-    id: str
-    name: str
-
-
 class TagTranscriptions(_Base):
     """Transcriptions to put the tag on and to take it off, by id."""
 
@@ -1670,47 +1714,21 @@ class TagTranscriptions(_Base):
 class TranscriptSnapshot(_Base):
     lang: Optional[str] = None
     last_seq: int = Field(alias="lastSeq")
-    recording_id: str = Field(alias="recordingId")
     segments: List["SegmentView"]
     sentences: List["SentenceView"]
     spans: List["CaptureSpan"]
     speaker_labels: Optional[SpeakerLabels] = Field(default=None, alias="speakerLabels")
     speakers: List["AppearanceView"]
     state: RecordingState
+    transcription_id: str = Field(alias="transcriptionId")
     translation_pending: Optional[bool] = Field(default=None, alias="translationPending")
 
 
-class Transcription(_Base):
-    """A transcription: a file, a link (with its `transcription` job), or
-something captured as it is spoken (`live: true`: a microphone, a
-stream, an RTMP encoder), which may feed broadcasts (`broadcasts`)."""
+class TranscriptionHistory(_Base):
+    """`GET /v1/transcriptions/{id}/history`: one page of the log, in order."""
 
-    archived_at: Optional[str] = Field(default=None, alias="archivedAt")
-    blocked: Optional["Blocked"] = None
-    broadcasts: Optional[List["BroadcastRef"]] = None
-    code: str
-    created_at: str = Field(alias="createdAt")
-    created_by_api_key_id: Optional[str] = Field(default=None, alias="createdByApiKeyId")
-    current_recording: Optional["CurrentRecording"] = Field(default=None, alias="currentRecording")
-    id: str
-    job: Optional["TranscriptionJob"] = None
-    kind: Literal["transcription"] = "transcription"
-    last_recorded_at: Optional[str] = Field(default=None, alias="lastRecordedAt")
-    last_recording: Optional["LastRecording"] = Field(default=None, alias="lastRecording")
-    lifecycle: Lifecycle
-    live: Optional[bool] = None
-    locked: Optional[bool] = None
-    name: str
-    origin: Literal["dashboard", "api", "extension", "desktop_app", "obs", "wordpress", "payload", "strapi", "sanity", "contentful", "mcp", "broadcast", "unknown"]
-    owner_principal_id: str = Field(alias="ownerPrincipalId")
-    purge_after: Optional[str] = Field(default=None, alias="purgeAfter")
-    recording_count: int = Field(alias="recordingCount")
-    settings: "Settings"
-    share_code: Optional[str] = Field(default=None, alias="shareCode")
-    share_url: str = Field(alias="shareUrl")
-    source: "CaptureSource"
-    tags: Optional[List["TagRef"]] = None
-    updated_at: str = Field(alias="updatedAt")
+    events: List["HistoryEvent"]
+    next_cursor: Optional[str] = Field(default=None, alias="nextCursor")
 
 
 class TranscriptionLookup(_Base):
@@ -1757,11 +1775,6 @@ password or link to change here."""
     settings: Optional["SettingsPatch"] = None
 
 
-class UploadRecording(_Base):
-    settings: Optional["SettingsPatch"] = None
-    url: Optional[str] = None
-
-
 class UsageCharge(_Base):
     """One charge as the usage report counts it (`GET /v1/billing/usage/charges`):
 a settled `charge` ledger entry, a `charge_correction` (money given
@@ -1776,7 +1789,6 @@ current amount."""
     opened_at: str = Field(alias="openedAt")
     rate_per_hour: float = Field(alias="ratePerHour")
     realtime_session_id: Optional[str] = Field(default=None, alias="realtimeSessionId")
-    recording_id: Optional[str] = Field(default=None, alias="recordingId")
     seconds: float
     source: str
     state: str
@@ -1829,7 +1841,6 @@ class VectorHit(_Base):
     media_start: float = Field(alias="mediaStart")
     passage: "Passage"
     recorded_at: Optional[str] = Field(default=None, alias="recordedAt")
-    recording_id: str = Field(alias="recordingId")
     rendered: Optional[str] = None
     score: float
     sentence_id: int = Field(alias="sentenceId")
@@ -2152,35 +2163,35 @@ SubscriberClientFrame = Annotated[Union[SubscribeUpdate, Ping], Field(discrimina
 class SubscribeReady(_Base):
     instance: str
     last_seq: int = Field(alias="lastSeq")
-    recording_id: str = Field(alias="recordingId")
     state: RecordingState
+    transcription_id: str = Field(alias="transcriptionId")
     type: Literal["subscribe.ready"] = "subscribe.ready"
 
 
 class RecordingState(_Base):
     media_s: Optional[float] = Field(default=None, alias="mediaS")
     reason: Optional[str] = None
-    recording_id: str = Field(alias="recordingId")
     state: RecordingState
+    transcription_id: str = Field(alias="transcriptionId")
     type: Literal["recording.state"] = "recording.state"
 
 
 class RecordingSettings(_Base):
-    recording_id: str = Field(alias="recordingId")
     settings: Any
+    transcription_id: str = Field(alias="transcriptionId")
     type: Literal["recording.settings"] = "recording.settings"
 
 
 class RecordingSilence(_Base):
     pauses_in_s: float = Field(alias="pausesInS")
-    recording_id: str = Field(alias="recordingId")
     silent_s: float = Field(alias="silentS")
+    transcription_id: str = Field(alias="transcriptionId")
     type: Literal["recording.silence"] = "recording.silence"
 
 
 class RecordingExpiring(_Base):
     ends_in_s: float = Field(alias="endsInS")
-    recording_id: str = Field(alias="recordingId")
+    transcription_id: str = Field(alias="transcriptionId")
     type: Literal["recording.expiring"] = "recording.expiring"
 
 
@@ -2225,10 +2236,9 @@ class TranscriptSpeakerNumbers(_Base):
     type: Literal["transcript.speakerNumbers"] = "transcript.speakerNumbers"
 
 
-class RecordingStarted(_Base):
-    recording_id: str = Field(alias="recordingId")
+class TranscriptionStarted(_Base):
     transcription_id: str = Field(alias="transcriptionId")
-    type: Literal["recording.started"] = "recording.started"
+    type: Literal["transcription.started"] = "transcription.started"
 
 
 class JobProgress(_Base):
@@ -2240,7 +2250,6 @@ class JobProgress(_Base):
     phase_pct: Optional[int] = Field(default=None, alias="phasePct")
     preview: Optional[bool] = None
     processed_s: float = Field(alias="processedS")
-    recording_id: str = Field(alias="recordingId")
     segments_done: int = Field(alias="segmentsDone")
     segments_total: Optional[int] = Field(default=None, alias="segmentsTotal")
     state: JobState
@@ -2252,10 +2261,10 @@ class JobProgress(_Base):
 class SpeakerVoice(_Base):
     error: Optional[str] = None
     progress: int
-    recording_id: str = Field(alias="recordingId")
     speaker: int
     speaker_id: Optional[str] = Field(default=None, alias="speakerId")
     state: str
+    transcription_id: str = Field(alias="transcriptionId")
     type: Literal["speaker.voice"] = "speaker.voice"
 
 
@@ -2264,17 +2273,15 @@ class StreamIngest(_Base):
     error: Optional[str] = None
     failures: Optional[int] = None
     last_audio_at: Optional[str] = Field(default=None, alias="lastAudioAt")
-    recording_id: str = Field(alias="recordingId")
     state: IngestState
     transcription_id: str = Field(alias="transcriptionId")
     type: Literal["stream.ingest"] = "stream.ingest"
     url: str
 
 
-class RecordingEnded(_Base):
-    recording_id: str = Field(alias="recordingId")
+class TranscriptionEnded(_Base):
     transcription_id: str = Field(alias="transcriptionId")
-    type: Literal["recording.ended"] = "recording.ended"
+    type: Literal["transcription.ended"] = "transcription.ended"
 
 
 class Audience(_Base):
@@ -2289,7 +2296,7 @@ class SubscribeGap(_Base):
     type: Literal["subscribe.gap"] = "subscribe.gap"
 
 
-SubscriberFrame = Annotated[Union[SubscribeReady, RecordingState, RecordingSettings, RecordingSilence, RecordingExpiring, TranscriptCorrected, TranscriptSpeakerGender, TranscriptSpeakerIdentified, TranscriptSpeakerNamed, TranscriptSpeakerNumbers, RecordingStarted, JobProgress, SpeakerVoice, StreamIngest, RecordingEnded, Audience, SubscribeGap], Field(discriminator="type")]
+SubscriberFrame = Annotated[Union[SubscribeReady, RecordingState, RecordingSettings, RecordingSilence, RecordingExpiring, TranscriptCorrected, TranscriptSpeakerGender, TranscriptSpeakerIdentified, TranscriptSpeakerNamed, TranscriptSpeakerNumbers, TranscriptionStarted, JobProgress, SpeakerVoice, StreamIngest, TranscriptionEnded, Audience, SubscribeGap], Field(discriminator="type")]
 
 SERVER_FRAME_TYPES = frozenset(["session.loading", "session.queued", "session.ready", "transcript.committed", "transcript.draft", "transcript.words", "transcript.amended", "transcript.latency", "transcript.speaker", "transcript.speakerGender", "transcript.speakerIdentified", "transcript.speakerNumbers", "transcript.sentence", "transcript.translated", "transcript.voice", "transcript.voiceStatus", "transcript.languageStatus", "transcript.retracted", "transcript.held", "transcript.progress", "stream.pull", "source.progress", "source.prepared", "session.done", "error"])
 

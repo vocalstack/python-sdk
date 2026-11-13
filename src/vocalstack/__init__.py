@@ -10,7 +10,6 @@ from ._models import (
     DraftSegment,
     Health,
     PublishGrant,
-    Recording,
     SearchResults,
     ServerFrame,
     SessionOptions,
@@ -30,7 +29,7 @@ from .errors import VocalStackError
 from .realtime import RealtimeTranscript
 from .realtime import RealtimeSession, pace_realtime
 
-__version__ = "1.0.0a12"
+__version__ = "1.0.0a13"
 
 __all__ = [
     "DEFAULT_BASE_URL",
@@ -42,7 +41,6 @@ __all__ = [
     "Health",
     "PublishGrant",
     "RealtimeTranscript",
-    "Recording",
     "SearchResults",
     "ServerFrame",
     "SessionOptions",

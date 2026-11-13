@@ -7,20 +7,21 @@ description: Use when writing Python code that calls the VocalStack speech API w
 
 The VocalStack API transcribes speech (files, links, live audio), with speaker
 labels and translation. The `vocalstack` package has one asyncio client,
-`VocalStack`, with one group per resource: `vs.transcriptions`, `vs.jobs`,
-`vs.recordings`, `vs.broadcasts`, `vs.search`, `vs.realtime` and a few more
+`VocalStack`, with one group per resource: `vs.transcriptions`,
+`vs.broadcasts`, `vs.search`, `vs.realtime` and a few more
 (listed at the end). Answers are pydantic models with snake_case attributes.
 
 ## What is what
 
 - A **transcription** is a file, a link, a microphone or a stream, transcribed
-  and stored. Create one with `await vs.transcriptions.create(...)`.
-- A **recording** is one take inside it. Its id (`recording_id`) is what you
-  read the transcript and exports with: `await vs.recordings.transcript(recording_id)`.
-- A **job** is a file or link recording's transcription work:
-  `await vs.jobs.wait(recording_id)` polls it until it is `done` or `failed`
+  and stored. Create one with `await vs.transcriptions.create(...)`. Its id is
+  what you read the transcript and exports with:
+  `await vs.transcriptions.transcript(tx.id)`. A live one is one continuous
+  transcript however often it is paused and resumed.
+- A **job** is a file or link transcription's work:
+  `await vs.transcriptions.wait_for_job(tx.id)` polls it until it is `done` or `failed`
   (`on_progress=lambda job: ...` sees each read: `job.state`, `job.progress.pct`).
-- A **broadcast** is a link listeners open to follow a live recording.
+- A **broadcast** is a link listeners open to follow a live transcription.
 - A **realtime session** (`vs.realtime`) is a socket you stream audio into and
   read the transcript from. Nothing is stored. "Session" means only this.
 
@@ -72,14 +73,13 @@ async def main():
             url="https://raw.githubusercontent.com/openai/whisper/main/tests/jfk.flac",
             name="JFK sample",
         )
-        rec = tx.job.recording_id
-        job = await vs.jobs.wait(rec)  # queued -> fetching -> transcribing -> done | failed
+        job = await vs.transcriptions.wait_for_job(tx.id)  # queued -> fetching -> transcribing -> done | failed
         if job.state != "done":
             raise SystemExit(f"transcription {job.state}: {job.error}")
-        snap = await vs.recordings.transcript(rec)
+        snap = await vs.transcriptions.transcript(tx.id)
         for s in snap.sentences:
             print(f"[speaker {s.speaker}] {s.text}" if s.speaker >= 0 else s.text)
-        print("recording_id", rec)
+        print("transcription id", tx.id)
 
 asyncio.run(main())
 ```
@@ -98,10 +98,10 @@ async def main(path):  # mp3, wav, flac, ogg, m4a, mp4 ...
             # Off unless asked for: settings summary, title, summaryTranslations,
             # translationTts (text-to-speech of translations), and share_link=True (a public share link).
         )
-        job = await vs.jobs.wait(tx.job.recording_id)
+        job = await vs.transcriptions.wait_for_job(tx.id)
         if job.state != "done":
             raise SystemExit(f"transcription {job.state}: {job.error}")
-        snap = await vs.recordings.transcript(job.recording_id)
+        snap = await vs.transcriptions.transcript(tx.id)
         print(" ".join(s.text for s in snap.sentences))
 
 asyncio.run(main(sys.argv[1]))
@@ -117,12 +117,12 @@ translated file. `export` returns the file's bytes.
 import asyncio, os, sys
 from vocalstack import VocalStack
 
-async def main(rec):
+async def main(tx_id):
     async with VocalStack(os.environ.get("VOCALSTACK_BASE_URL"), api_key=os.environ["VOCALSTACK_API_KEY"]) as vs:
-        snap = await vs.recordings.transcript(rec)
+        snap = await vs.transcriptions.transcript(tx_id)
         print(len(snap.segments), "segments,", len(snap.sentences), "sentences, state", snap.state)
         with open("transcript.srt", "wb") as f:
-            f.write(await vs.recordings.export(rec, "srt"))
+            f.write(await vs.transcriptions.export(tx_id, "srt"))
 
 asyncio.run(main(sys.argv[1]))
 ```
@@ -130,7 +130,7 @@ asyncio.run(main(sys.argv[1]))
 ## 4. Live transcription from a microphone or a file
 
 A live transcription takes raw PCM: 32-bit float little-endian, 16 kHz, mono.
-Create it, start a recording, and open the publisher socket the grant names.
+Create it, start it, and open the publisher socket the grant names.
 Here ffmpeg decodes a file, and `pace_realtime` sends it at realtime speed and
 then calls `eof()`. For a microphone, read ffmpeg's stdout as it arrives
 (`-f avfoundation -i :0` on macOS, `-f pulse -i default` on Linux) and call
@@ -143,22 +143,23 @@ from vocalstack import VocalStack, pace_realtime
 async def main(path):
     async with VocalStack(os.environ.get("VOCALSTACK_BASE_URL"), api_key=os.environ["VOCALSTACK_API_KEY"]) as vs:
         tx = await vs.transcriptions.create_live(name="Live demo", settings={"spokenLanguage": "en"})
-        grant = await vs.transcriptions.start_recording(tx.id)
+        grant = await vs.transcriptions.start(tx.id)
 
         pcm = subprocess.run(["ffmpeg", "-loglevel", "error", "-i", path,
                               "-f", "f32le", "-ac", "1", "-ar", "16000", "-"],
                              check=True, capture_output=True).stdout
 
         # A cold engine can take a while to load, so allow a long ready deadline.
-        async with await vs.recordings.publish(grant, ready_deadline_s=180) as stream:
-            feeder = asyncio.create_task(pace_realtime(stream, pcm))  # then eof(), which ends the recording
+        async with await vs.transcriptions.publish(grant, ready_deadline_s=180) as stream:
+            feeder = asyncio.create_task(pace_realtime(stream, pcm))  # then eof(), which ends the transcription
             async for event in stream:
                 if event.type == "transcript.committed":
                     print(f"[speaker {event.segment.speaker}] {event.segment.text}", flush=True)
             await feeder
 
-        # To end a recording without eof(): vs.recordings.pause(id), then vs.recordings.stop(id).
-        snap = await vs.recordings.transcript(grant.recording.id)
+        # To end it without eof(): vs.transcriptions.pause(tx.id), then vs.transcriptions.stop(tx.id).
+        # A stopped transcription cannot be started again: create a new one.
+        snap = await vs.transcriptions.transcript(tx.id)
         print("final:", " ".join(s.text for s in snap.sentences))
 
 asyncio.run(main(sys.argv[1]))
@@ -177,7 +178,7 @@ async def main(q):  # 2+ characters
     async with VocalStack(os.environ.get("VOCALSTACK_BASE_URL"), api_key=os.environ["VOCALSTACK_API_KEY"]) as vs:
         res = await vs.search.query(q, limit=5)
         for h in res.hits:
-            print(f"{h.link_name} @ {h.media_start:.1f}s [speaker {h.speaker}]: {h.text} (recording {h.recording_id})")
+            print(f"{h.link_name} @ {h.media_start:.1f}s [speaker {h.speaker}]: {h.text} (transcription {h.transcription_id})")
 
 asyncio.run(main(sys.argv[1]))
 ```
@@ -225,10 +226,12 @@ except VocalStackError as e:
 
 ## More
 
-- The other groups: `vs.transcriptions` (`list`, `get`, `update`, `archive`,
-  `restore`, `purge`, `list_share_links`, `create_share_link`, `list_scripts`), `vs.recordings`
-  (`get`, `summarize`, `summary`, `translation`, `audio_url`, `subscribe`),
-  `vs.corrections`, `vs.share_links`, `vs.speakers`, `vs.voices`, `vs.broadcasts`,
+- The other groups: `vs.transcriptions` (also `list`, `get`, `update`, `archive`,
+  `restore`, `purge`, `list_share_links`, `create_share_link`, `list_scripts`,
+  `pause`, `resume`, `stop`, `summarize`, `summary`, `translation`, `audio`,
+  `subscribe`, `history`, `corrections`, `apply_corrections`, `request_voice`),
+  `vs.corrections` (`revert`), `vs.share_links`, `vs.speakers` (with `invite`, `list_invites`, `renew_invite`,
+  `cancel_invite`), `vs.speaker_invites` (the invited person's link, no key), `vs.voices`, `vs.broadcasts`,
   `vs.me` (`get`, `usage`), `vs.languages`, `vs.rtmp`, `vs.events`, `vs.meta`.
   Each method is its operation's name in the OpenAPI document, in snake_case
   (`transcriptions.create` is `POST /v1/transcriptions`).

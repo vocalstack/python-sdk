@@ -23,22 +23,22 @@ def run(coro):
     return asyncio.run(coro)
 
 
-class RenderVoice(unittest.TestCase):
+class RequestVoice(unittest.TestCase):
     def test_langs_alone_still_work(self):
         vs, calls = client([])
-        run(vs.recordings.render_voice("r1", ["es"]))
-        self.assertEqual(str(calls[0].url), "http://api.test/v1/recordings/r1/voice")
+        run(vs.transcriptions.request_voice("t1", ["es"]))
+        self.assertEqual(str(calls[0].url), "http://api.test/v1/transcriptions/t1/voice")
         self.assertEqual(json.loads(calls[0].content), {"langs": ["es"]})
 
     def test_a_listener_asks_with_a_cast(self):
         vs, calls = client([])
-        run(vs.recordings.render_voice("r1", ["es"], voice_by_speaker={0: "stock-a"}, near=4, share_code="abc"))
-        self.assertEqual(str(calls[0].url), "http://api.test/v1/recordings/r1/voice?shareCode=abc")
+        run(vs.transcriptions.request_voice("t1", ["es"], voice_by_speaker={0: "stock-a"}, near=4, share_code="abc"))
+        self.assertEqual(str(calls[0].url), "http://api.test/v1/transcriptions/t1/voice?shareCode=abc")
         self.assertEqual(json.loads(calls[0].content), {"langs": ["es"], "voiceBySpeaker": {"0": "stock-a"}, "near": 4})
 
     def test_a_cloned_voice_is_asked_with_consent(self):
         vs, calls = client([])
-        run(vs.recordings.render_voice("r1", ["es"], voice_by_speaker={0: "clone:abc"}, consent=True))
+        run(vs.transcriptions.request_voice("t1", ["es"], voice_by_speaker={0: "clone:abc"}, consent=True))
         self.assertEqual(json.loads(calls[0].content), {"langs": ["es"], "consent": True, "voiceBySpeaker": {"0": "clone:abc"}})
 
 

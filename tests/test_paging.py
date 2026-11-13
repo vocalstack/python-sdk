@@ -31,7 +31,7 @@ def client(pages):
 def tx(id):
     return {
         "id": id, "code": "tx-1", "name": id, "kind": "transcription", "source": {"kind": "mic"}, "lifecycle": "active",
-        "ownerPrincipalId": "p", "origin": "api", "shareUrl": "", "settings": {}, "recordingCount": 0, "createdAt": "2026-10-12T00:00:00Z",
+        "ownerPrincipalId": "p", "origin": "api", "shareUrl": "", "settings": {}, "state": "idle", "createdAt": "2026-10-12T00:00:00Z",
         "updatedAt": "2026-10-12T00:00:00Z",
     }
 
@@ -74,11 +74,12 @@ class Paging(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual((calls[0].url.params.get("cursor"), calls[0].url.params.get("limit")), ("c8", "100"))
 
-    def test_events_start_after_a_seq_then_follow_the_cursor(self):
+    def test_history_starts_after_a_seq_then_follow_the_cursor(self):
         ev = lambda s: {"seq": s, "kind": "transcript.final", "at": "2026-10-12T00:00:00Z", "payload": {}}
         vs, calls = client([{"events": [ev(4), ev(5)], "nextCursor": "5"}, {"events": [ev(6)]}])
-        got = run(vs.recordings.events("r1", after=3, limit=2))
+        got = run(vs.transcriptions.history("t1", after=3, limit=2))
         self.assertEqual([e.seq for e in got], [4, 5, 6])
+        self.assertEqual(calls[0].url.path, "/v1/transcriptions/t1/history")
         self.assertEqual(calls[0].url.params.get("after"), "3")
         self.assertIsNone(calls[1].url.params.get("after"), "never cursor and after together")
         self.assertEqual(calls[1].url.params.get("cursor"), "5")

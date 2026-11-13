@@ -76,7 +76,7 @@ class _Group:
 
 
 class _ParentResource(_Group):
-    """What broadcasts and transcriptions share: recordings, share links."""
+    """What broadcasts and transcriptions share: archiving, share links, scripts, the events socket."""
 
     _base = ""
     _key = ""
@@ -121,33 +121,6 @@ class _ParentResource(_Group):
     async def purge_many(self, ids: List[str]) -> m.ManyResult:
         return _one(m.ManyResult, await self._t.json("POST", f"{self._base}/purge", json_body={"ids": ids}))
 
-    async def list_recordings(self, id: str, lifecycle: str = "active") -> List[m.Recording]:
-        """Every recording, newest first (every page of ``list_recordings_page``)."""
-        items = await _all_pages(
-            lambda c: self._t.json("GET", self._path(id, "/recordings"), query={"lifecycle": lifecycle, "cursor": c}), "recordings"
-        )
-        return [m.Recording.model_validate(x) for x in items]
-
-    async def list_recordings_page(
-        self, id: str, *, lifecycle: str = "active", cursor: Optional[str] = None, limit: Optional[int] = None
-    ) -> m.RecordingPage:
-        """One page of recordings, newest first; ``cursor`` is the previous page's ``next_cursor``."""
-        data = await self._t.json("GET", self._path(id, "/recordings"), query={"lifecycle": lifecycle, "cursor": cursor, "limit": limit})
-        return _one(m.RecordingPage, data)
-
-    async def start_recording(
-        self, id: str, *, idempotency_key: Optional[str] = None, **fields: Any
-    ) -> m.PublishGrant:
-        """Start a live recording. The grant's ``stream_url`` is the publisher
-        socket (``vs.recordings.publish(grant)``). A 409 ``conflict`` with
-        ``details["takeover"]`` means another device is recording: pass
-        ``takeover=True`` to record here instead."""
-        body = _body(m.StartRecording, fields)
-        data = await self._t.json(
-            "POST", self._path(id, "/recordings"), json_body=body, idempotency_key=idempotency_key
-        )
-        return _one(m.PublishGrant, data)
-
     async def list_share_links(self, id: str) -> List[m.ShareLink]:
         return _many(m.ShareLink, await self._t.json("GET", self._path(id, "/share-links")), "links")
 
@@ -161,11 +134,10 @@ class _ParentResource(_Group):
     async def events(
         self, id: str, *, listener_token: Optional[str] = None, share_code: Optional[str] = None
     ) -> Any:
-        """The events socket a waiting screen needs (``recording.started``:
-        it is live, ``recording.ended``, ``job.progress``,
-        ``stream.ingest``; each names the transcription the recording is
-        made in, ``transcriptionId``): a ``websockets`` connection yielding
-        JSON text."""
+        """The events socket a waiting screen needs (``transcription.started``:
+        it is live, ``transcription.ended``, ``job.progress``,
+        ``stream.ingest``; each names its transcription, ``transcriptionId``):
+        a ``websockets`` connection yielding JSON text."""
         url = self._t.ws_url(self._path(id, "/events"), listener_query(listener_token, share_code))
         return await websockets.connect(url, additional_headers=self._t.auth_headers())
 
@@ -182,6 +154,16 @@ class Broadcasts(_ParentResource):
         body = _body(m.CreateBroadcast, fields)
         data = await self._t.json("POST", self._base, json_body=body, idempotency_key=idempotency_key)
         return _one(m.Broadcast, data)
+
+    async def record(self, id: str, *, idempotency_key: Optional[str] = None, **fields: Any) -> m.PublishGrant:
+        """Start a new live transcription on the broadcast, each call a new
+        one (the grant's ``transcription``). The grant's ``stream_url`` is the
+        publisher socket (``vs.transcriptions.publish(grant)``). A 409
+        ``conflict`` with ``details["takeover"]`` means another device is
+        sending: pass ``takeover=True`` to send from here instead."""
+        body = _body(m.StartLiveTranscription, fields)
+        data = await self._t.json("POST", self._path(id, "/record"), json_body=body, idempotency_key=idempotency_key)
+        return _one(m.PublishGrant, data)
 
     async def add_audio_source(self, id: str, **fields: Any) -> m.Broadcast:
         """A stream the broadcast can record from (a YouTube live, a radio address)."""
@@ -225,6 +207,17 @@ class Transcriptions(_ParentResource):
     _key = "transcriptions"
     _model = m.Transcription
     _update = m.UpdateTranscription
+
+    def __init__(self, t: Transport, ready_deadline_s: float) -> None:
+        super().__init__(t)
+        self._ready_deadline_s = ready_deadline_s
+
+    async def get(
+        self, id: str, *, listener_token: Optional[str] = None, share_code: Optional[str] = None
+    ) -> m.Transcription:
+        """One transcription; a listener reads it with ``listener_token`` or
+        ``share_code`` (without the owner's details)."""
+        return _one(m.Transcription, await self._t.json("GET", self._path(id), query=listener_query(listener_token, share_code)))
 
     async def list(
         self,
@@ -284,19 +277,6 @@ class Transcriptions(_ParentResource):
         data = await self._t.json("GET", self._base, query={"lifecycle": lifecycle, "cursor": cursor, "limit": limit, **query})
         return _one(m.TranscriptionPage, data)
 
-    async def upload_recording(
-        self, id: str, *, idempotency_key: Optional[str] = None, **fields: Any
-    ) -> m.PublishGrant:
-        """A file or link recording in this transcription: no live phase,
-        transcribed at full speed.  It has no job: open the grant's socket
-        with ``vs.recordings.publish(grant)`` (with ``url`` the server
-        fetches the link) and read it until the session is done."""
-        body = _body(m.UploadRecording, fields)
-        data = await self._t.json(
-            "POST", self._path(id, "/recordings/upload"), json_body=body, idempotency_key=idempotency_key
-        )
-        return _one(m.PublishGrant, data)
-
     async def create(
         self,
         *,
@@ -306,9 +286,8 @@ class Transcriptions(_ParentResource):
         **fields: Any,
     ) -> m.Transcription:
         """From a file (``file``: a path, bytes or an open binary file) or a
-        public link (``url=...``). The answer's ``transcription.recording_id``
-        is the job: ``await vs.jobs.wait(recording_id)``, then
-        ``await vs.recordings.transcript(recording_id)``."""
+        public link (``url=...``): ``await vs.transcriptions.wait_for_job(tx.id)``,
+        then ``await vs.transcriptions.transcript(tx.id)``."""
         options = _body(m.CreateTranscription, fields)
         if file is None:
             data = await self._t.json("POST", self._base, json_body=options, idempotency_key=idempotency_key)
@@ -329,7 +308,7 @@ class Transcriptions(_ParentResource):
 
     async def create_live(self, *, idempotency_key: Optional[str] = None, **fields: Any) -> m.Transcription:
         """Captured as it is spoken (a microphone, or a stream the server
-        pulls). Created idle: ``start_recording(id)`` starts it."""
+        pulls). Created idle: ``start(id)`` starts it."""
         body = _body(m.CreateLiveTranscription, fields)
         data = await self._t.json("POST", f"{self._base}/live", json_body=body, idempotency_key=idempotency_key)
         return _one(m.Transcription, data)
@@ -358,38 +337,32 @@ class Transcriptions(_ParentResource):
         await self._t.json("PUT", self._path(id, f"/appearances/{appearance}"), json_body={"name": name})
 
 
-class Recordings(_Group):
-    """``vs.recordings``: one take, live or uploaded."""
+    async def start(
+        self, id: str, *, idempotency_key: Optional[str] = None, **fields: Any
+    ) -> m.PublishGrant:
+        """Start a live transcription made with ``create_live``. The grant's
+        ``stream_url`` is the publisher socket (``vs.transcriptions.publish(grant)``).
+        A transcription runs once: one already stopped is ``invalid_state``.
+        A 409 ``conflict`` with ``details["takeover"]`` means another device
+        is sending its audio: pass ``takeover=True`` to send it from here instead."""
+        body = _body(m.StartLiveTranscription, fields)
+        data = await self._t.json("POST", self._path(id, "/start"), json_body=body, idempotency_key=idempotency_key)
+        return _one(m.PublishGrant, data)
 
-    def __init__(self, t: Transport, ready_deadline_s: float) -> None:
-        super().__init__(t)
-        self._ready_deadline_s = ready_deadline_s
+    async def pause(self, id: str) -> m.Transcription:
+        return _one(m.Transcription, await self._t.json("POST", self._path(id, "/pause")))
 
-    @staticmethod
-    def _path(id: str, rest: str = "") -> str:
-        return f"/v1/recordings/{_p(id)}{rest}"
+    async def resume(self, id: str) -> m.Transcription:
+        return _one(m.Transcription, await self._t.json("POST", self._path(id, "/resume")))
 
-    async def get(
-        self, id: str, *, listener_token: Optional[str] = None, share_code: Optional[str] = None
-    ) -> m.Recording:
-        return _one(m.Recording, await self._t.json("GET", self._path(id), query=listener_query(listener_token, share_code)))
-
-    async def pause(self, id: str) -> m.Recording:
-        return _one(m.Recording, await self._t.json("POST", self._path(id, "/pause")))
-
-    async def resume(self, id: str) -> m.Recording:
-        return _one(m.Recording, await self._t.json("POST", self._path(id, "/resume")))
-
-    async def stop(self, id: str, reason: Optional[str] = None) -> m.Recording:
-        """Only from paused."""
+    async def stop(self, id: str, reason: Optional[str] = None) -> m.Transcription:
+        """Only from paused. A stopped transcription cannot be started again."""
         data = await self._t.json("POST", self._path(id, "/stop"), json_body={"reason": reason})
-        return _one(m.Recording, data)
-
-    async def settings(self, id: str, **fields: Any) -> m.Recording:
-        body = _body(m.SettingsPatch, fields)
-        return _one(m.Recording, await self._t.json("PATCH", self._path(id, "/settings"), json_body=body))
+        return _one(m.Transcription, data)
 
     async def publish_token(self, id: str, *, takeover: bool = False) -> m.PublishGrant:
+        """A new grant for a running transcription's publisher socket (a
+        reconnect, or another device with ``takeover=True``)."""
         data = await self._t.json("POST", self._path(id, "/publish-token"), json_body={"takeover": takeover})
         return _one(m.PublishGrant, data)
 
@@ -406,31 +379,55 @@ class Recordings(_Group):
         from .realtime import RealtimeSession
 
         if not grant.stream_url:
-            raise VocalStackError("invalid_state", "this grant has no stream_url (an upload has no publisher socket)")
+            raise VocalStackError("invalid_state", "this grant has no stream_url")
         return await RealtimeSession.connect(
-            grant.session_id or grant.recording.id,
+            grant.session_id or grant.transcription.id,
             grant.stream_url,
             ready_deadline_s=ready_deadline_s or self._ready_deadline_s,
             on_frame=on_frame,
         )
 
-    async def archive(self, id: str) -> m.Recording:
-        return _one(m.Recording, await self._t.json("POST", self._path(id, "/archive")))
+    async def job(self, id: str) -> m.TranscriptionJob:
+        """A file or link transcription's job. States: queued, fetching,
+        transcribing, done, failed, and cropping (waiting for ``start_job``)."""
+        return _one(m.TranscriptionJob, await self._t.json("GET", self._path(id, "/job")))
 
-    async def restore(self, id: str) -> m.Recording:
-        return _one(m.Recording, await self._t.json("POST", self._path(id, "/restore")))
+    async def start_job(self, id: str, *, start_s: Optional[float] = None, end_s: Optional[float] = None) -> m.TranscriptionJob:
+        """Release a job waiting in ``cropping``: the window to transcribe, in seconds."""
+        body = _body(m.StartJob, {"start_s": start_s, "end_s": end_s})
+        return _one(m.TranscriptionJob, await self._t.json("POST", self._path(id, "/job/start"), json_body=body))
 
-    async def purge(self, id: str) -> None:
-        await self._t.json("POST", self._path(id, "/purge"))
+    async def retry_job(self, id: str) -> m.TranscriptionJob:
+        """Re-queue a failed job from its stored source."""
+        return _one(m.TranscriptionJob, await self._t.json("POST", self._path(id, "/job/retry")))
 
-    async def archive_many(self, ids: List[str]) -> m.ManyResult:
-        return _one(m.ManyResult, await self._t.json("POST", "/v1/recordings/archive", json_body={"ids": ids}))
+    async def job_preview(self, id: str) -> bytes:
+        """The file the server fetched for a link job waiting in ``cropping``."""
+        resp = await self._t.raw("GET", self._path(id, "/job/preview"), headers={"accept": "*/*"})
+        return resp.content
 
-    async def restore_many(self, ids: List[str]) -> m.ManyResult:
-        return _one(m.ManyResult, await self._t.json("POST", "/v1/recordings/restore", json_body={"ids": ids}))
-
-    async def purge_many(self, ids: List[str]) -> m.ManyResult:
-        return _one(m.ManyResult, await self._t.json("POST", "/v1/recordings/purge", json_body={"ids": ids}))
+    async def wait_for_job(
+        self,
+        id: str,
+        *,
+        interval_s: float = 2.0,
+        timeout_s: Optional[float] = None,
+        on_progress: Optional[Callable[[m.TranscriptionJob], None]] = None,
+    ) -> m.TranscriptionJob:
+        """Poll until the job is ``done``, ``failed`` or ``cropping`` and
+        return it. It does not raise on ``failed``: check ``job.state`` and ``job.error``.
+        ``on_progress`` sees every job read, the last one included: its
+        ``state`` and ``progress`` (``pct``, ``processed_s``, the fetch phase)."""
+        deadline = None if timeout_s is None else time.monotonic() + timeout_s
+        while True:
+            job = await self.job(id)
+            if on_progress is not None:
+                on_progress(job)
+            if job.state in _TERMINAL:
+                return job
+            if deadline is not None and time.monotonic() + interval_s > deadline:
+                raise VocalStackError("timeout", f"job still {job.state} after {timeout_s}s", retryable=True)
+            await asyncio.sleep(interval_s)
 
     async def transcript(
         self,
@@ -473,13 +470,13 @@ class Recordings(_Group):
     async def export(
         self, id: str, format: str, *, lang: Optional[str] = None, share_code: Optional[str] = None, listener_token: Optional[str] = None
     ) -> bytes:
-        """An export file: ``json``, ``srt``, ``xlsx`` or ``pdf``; ``lang`` makes it read in that language. ``listener_token``: a broadcast listener's, once the recording has ended."""
+        """An export file: ``json``, ``srt``, ``xlsx`` or ``pdf``; ``lang`` makes it read in that language. ``listener_token``: a broadcast listener's, once the transcription has ended."""
         resp = await self._t.raw(
             "GET", self._path(id, "/export"), headers={"accept": "*/*"}, query={"format": format, "lang": lang, "shareCode": share_code, "listenerToken": listener_token}
         )
         return resp.content
 
-    async def audio_url(
+    async def audio(
         self,
         id: str,
         *,
@@ -497,13 +494,16 @@ class Recordings(_Group):
             raise VocalStackError("not_found", "no signed URL in the redirect", status=resp.status_code)
         return loc
 
-    async def clip(
+    async def audio_clip(
         self, id: str, start_s: float, end_s: float, *, listener_token: Optional[str] = None, share_code: Optional[str] = None
     ) -> bytes:
-        """A stretch of the recording's audio, ``start_s`` to ``end_s`` seconds (at most 120 s)."""
+        """A stretch of the transcription's audio, ``start_s`` to ``end_s`` seconds (at most 120 s)."""
         query = {**listener_query(listener_token, share_code), "startS": start_s, "endS": end_s}
         resp = await self._t.raw("GET", self._path(id, "/audio/clip"), headers={"accept": "*/*"}, query=query)
         return resp.content
+
+    async def media_token(self, id: str) -> Dict[str, Any]:
+        return await self._t.json("GET", self._path(id, "/media-token"))
 
     async def voice(
         self, id: str, lang: Optional[str] = None, *, listener_token: Optional[str] = None, share_code: Optional[str] = None
@@ -512,7 +512,7 @@ class Recordings(_Group):
         data = await self._t.json("GET", self._path(id, "/voice"), query=query)
         return [m.VoiceTrack.model_validate(x) for x in data or []]
 
-    async def render_voice(
+    async def request_voice(
         self,
         id: str,
         langs: List[str],
@@ -556,32 +556,52 @@ class Recordings(_Group):
         share_code: Optional[str] = None,
     ) -> bytes:
         """One sentence spoken in ``lang``: ``sentence`` is a transcript sentence's
-        ``sentenceId``, not a segment's position.  In the recording's default reading: each
+        ``sentenceId``, not a segment's position.  In the transcription's default reading: each
         speaker in their granted clone, else a stock voice of their gender."""
         query = {**listener_query(listener_token, share_code), "lang": lang, "voices": voices, "voice": voice, "format": format, "part": part or None}
         resp = await self._t.raw("GET", self._path(id, f"/voice/{sentence}"), headers={"accept": "*/*"}, query=query)
         return resp.content
 
-    async def media_token(self, id: str) -> Dict[str, Any]:
-        return await self._t.json("GET", self._path(id, "/media-token"))
+    async def corrections(self, id: str) -> List[m.Correction]:
+        """Every correction, newest first (every page of ``corrections_page``)."""
+        path = self._path(id, "/corrections")
+        items = await _all_pages(lambda c: self._t.json("GET", path, query={"cursor": c}), "corrections")
+        return [m.Correction.model_validate(x) for x in items]
 
-    async def events(self, id: str, *, after: Optional[int] = None, limit: Optional[int] = None) -> List[m.RecordingEvent]:
+    async def corrections_page(self, id: str, *, cursor: Optional[str] = None, limit: Optional[int] = None) -> m.CorrectionPage:
+        """One page of corrections, newest first; ``cursor`` is the previous page's ``next_cursor``."""
+        data = await self._t.json("GET", self._path(id, "/corrections"), query={"cursor": cursor, "limit": limit})
+        return _one(m.CorrectionPage, data)
+
+    async def apply_corrections(self, id: str, **fields: Any) -> List[m.Correction]:
+        """Apply a staged batch atomically (``CorrectionBatch``); each one is
+        undone with ``vs.corrections.revert``."""
+        body = _body(m.CorrectionBatch, fields)
+        data = await self._t.json("POST", self._path(id, "/corrections"), json_body=body)
+        return _many(m.Correction, data, "corrections")
+
+    async def retranscribe(self, id: str, *, seqs: List[int], lang: str) -> List[m.Correction]:
+        """Read lines again with the language forced."""
+        data = await self._t.json("POST", self._path(id, "/retranscribe"), json_body={"seqs": seqs, "lang": lang})
+        return _many(m.Correction, data, "corrections")
+
+    async def history(self, id: str, *, after: Optional[int] = None, limit: Optional[int] = None) -> List[m.HistoryEvent]:
         """The durable event log with wall times (owner only): every event
         after ``after`` (a ``seq``; the whole log without it), read ``limit`` a page."""
 
         def page(cursor: Optional[str]) -> Any:
             q = {"cursor": cursor, "limit": limit} if cursor else {"after": after, "limit": limit}
-            return self._t.json("GET", self._path(id, "/events"), query=q)
+            return self._t.json("GET", self._path(id, "/history"), query=q)
 
-        return [m.RecordingEvent.model_validate(x) for x in await _all_pages(page, "events")]
+        return [m.HistoryEvent.model_validate(x) for x in await _all_pages(page, "events")]
 
-    async def events_page(
+    async def history_page(
         self, id: str, *, cursor: Optional[str] = None, after: Optional[int] = None, limit: Optional[int] = None
-    ) -> m.RecordingEvents:
+    ) -> m.TranscriptionHistory:
         """One page of the event log (500 by default, 1000 at most): from
         ``after`` a ``seq``, or the previous page's ``next_cursor`` as ``cursor``."""
-        data = await self._t.json("GET", self._path(id, "/events"), query={"cursor": cursor, "after": after, "limit": limit})
-        return _one(m.RecordingEvents, data)
+        data = await self._t.json("GET", self._path(id, "/history"), query={"cursor": cursor, "after": after, "limit": limit})
+        return _one(m.TranscriptionHistory, data)
 
     async def subscribe(
         self,
@@ -593,7 +613,7 @@ class Recordings(_Group):
         share_code: Optional[str] = None,
         as_owner: bool = True,
     ) -> Any:
-        """The recording's live fan-out socket: a ``websockets`` connection
+        """The transcription's live fan-out socket: a ``websockets`` connection
         whose first frame is ``subscribe.ready``; read the backfill with
         ``transcript(id, after=...)``."""
         url = self._t.ws_url(
@@ -613,77 +633,8 @@ class Recordings(_Group):
 _TERMINAL = {"done", "failed", "stopped", "cropping"}
 
 
-class Jobs(_Group):
-    """``vs.jobs``: a file or link recording's transcription job. States:
-    queued, fetching, transcribing, done, failed, and cropping (waiting for ``start``)."""
-
-    async def get(self, recording_id: str) -> m.TranscriptionJob:
-        return _one(m.TranscriptionJob, await self._t.json("GET", f"/v1/recordings/{_p(recording_id)}/job"))
-
-    async def start(self, recording_id: str, *, start_s: Optional[float] = None, end_s: Optional[float] = None) -> m.TranscriptionJob:
-        """Release a job waiting in ``cropping``: the window to transcribe, in seconds."""
-        body = _body(m.StartJob, {"start_s": start_s, "end_s": end_s})
-        return _one(m.TranscriptionJob, await self._t.json("POST", f"/v1/recordings/{_p(recording_id)}/job/start", json_body=body))
-
-    async def retry(self, recording_id: str) -> m.TranscriptionJob:
-        """Re-queue a failed job from its stored source."""
-        return _one(m.TranscriptionJob, await self._t.json("POST", f"/v1/recordings/{_p(recording_id)}/job/retry"))
-
-    async def preview(self, recording_id: str) -> bytes:
-        """The file the server fetched for a link job waiting in ``cropping``."""
-        resp = await self._t.raw("GET", f"/v1/recordings/{_p(recording_id)}/job/preview", headers={"accept": "*/*"})
-        return resp.content
-
-    async def wait(
-        self,
-        recording_id: str,
-        *,
-        interval_s: float = 2.0,
-        timeout_s: Optional[float] = None,
-        on_progress: Optional[Callable[[m.TranscriptionJob], None]] = None,
-    ) -> m.TranscriptionJob:
-        """Poll until the job is ``done``, ``failed`` or ``cropping`` and
-        return it. It does not raise on ``failed``: check ``job.state`` and ``job.error``.
-        ``on_progress`` sees every job read, the last one included: its
-        ``state`` and ``progress`` (``pct``, ``processed_s``, the fetch phase)."""
-        deadline = None if timeout_s is None else time.monotonic() + timeout_s
-        while True:
-            job = await self.get(recording_id)
-            if on_progress is not None:
-                on_progress(job)
-            if job.state in _TERMINAL:
-                return job
-            if deadline is not None and time.monotonic() + interval_s > deadline:
-                raise VocalStackError("timeout", f"job still {job.state} after {timeout_s}s", retryable=True)
-            await asyncio.sleep(interval_s)
-
-
 class Corrections(_Group):
-    """``vs.corrections``: edits to a finished transcript, each revertible."""
-
-    async def list(self, recording_id: str) -> List[m.Correction]:
-        """Every correction, newest first (every page of ``list_page``)."""
-        path = f"/v1/recordings/{_p(recording_id)}/corrections"
-        items = await _all_pages(lambda c: self._t.json("GET", path, query={"cursor": c}), "corrections")
-        return [m.Correction.model_validate(x) for x in items]
-
-    async def list_page(self, recording_id: str, *, cursor: Optional[str] = None, limit: Optional[int] = None) -> m.CorrectionPage:
-        """One page of corrections, newest first; ``cursor`` is the previous page's ``next_cursor``."""
-        data = await self._t.json("GET", f"/v1/recordings/{_p(recording_id)}/corrections", query={"cursor": cursor, "limit": limit})
-        return _one(m.CorrectionPage, data)
-
-    async def apply(self, recording_id: str, **fields: Any) -> List[m.Correction]:
-        """Apply a staged batch atomically (``CorrectionBatch``)."""
-        body = _body(m.CorrectionBatch, fields)
-        data = await self._t.json("POST", f"/v1/recordings/{_p(recording_id)}/corrections", json_body=body)
-        return _many(m.Correction, data, "corrections")
-
-    async def retranscribe(self, recording_id: str, *, seqs: List[int], lang: str) -> List[m.Correction]:
-        """Read lines again with the language forced."""
-        data = await self._t.json(
-            "POST", f"/v1/recordings/{_p(recording_id)}/retranscribe", json_body={"seqs": seqs, "lang": lang}
-        )
-        return _many(m.Correction, data, "corrections")
+    """``vs.corrections``: a correction made with ``transcriptions.apply_corrections``, undone."""
 
     async def revert(self, correction_id: str) -> m.Correction:
         return _one(m.Correction, await self._t.json("POST", f"/v1/corrections/{_p(correction_id)}/revert"))
@@ -693,7 +644,7 @@ class ShareLinks(_Group):
     """``vs.share_links``: named public links (create and list them on their owner)."""
 
     async def open(self, code: str) -> m.SharedTranscript:
-        """What a share code opens, with no credential: pass the code as ``share_code`` to the recording's reads."""
+        """What a share code opens, with no credential: pass the code as ``share_code`` to the transcription's reads."""
         return _one(m.SharedTranscript, await self._t.json("GET", f"/v1/shares/{_p(code)}", anonymous=True))
 
     async def update(self, id: str, **fields: Any) -> m.ShareLink:
@@ -806,19 +757,19 @@ class Voices(_Group):
         self,
         lang: str,
         *,
-        recording: Optional[str] = None,
+        transcription: Optional[str] = None,
         listener_token: Optional[str] = None,
         share_code: Optional[str] = None,
         as_owner: bool = True,
     ) -> m.VoiceCatalogue:
         """The voices that can speak ``lang``, best first (with a token, also
-        the account's ready clones). ``recording`` also offers the cloned
-        voices that recording uses, to whoever may read it: its owner, or a
+        the account's ready clones). ``transcription`` also offers the cloned
+        voices that transcription uses, to whoever may read it: its owner, or a
         listener with ``listener_token`` or ``share_code``."""
         data = await self._t.json(
             "GET",
             "/v1/voices/available",
-            query={**listener_query(listener_token, share_code), "lang": lang, "recording": recording},
+            query={**listener_query(listener_token, share_code), "lang": lang, "transcription": transcription},
             anonymous=not as_owner,
         )
         return _one(m.VoiceCatalogue, data)
@@ -888,7 +839,6 @@ class Speakers(_Group):
         transcription_id: str,
         appearance: int,
         name: str,
-        recording_id: Optional[str] = None,
         color: Optional[str] = None,
         consent: Optional[bool] = None,
         spans: Optional[List[Dict[str, float]]] = None,
@@ -904,7 +854,6 @@ class Speakers(_Group):
             m.CreateSpeakerFromAppearance,
             {
                 "transcription_id": transcription_id,
-                "recording_id": recording_id,
                 "appearance": appearance,
                 "name": name,
                 "color": color,
@@ -918,9 +867,9 @@ class Speakers(_Group):
         return _one(m.Speaker, data)
 
     async def appearance_samples(
-        self, *, transcription_id: str, appearance: int, recording_id: Optional[str] = None, spans: Optional[List[Dict[str, float]]] = None
+        self, *, transcription_id: str, appearance: int, spans: Optional[List[Dict[str, float]]] = None
     ) -> m.AppearanceSamples:
-        """A speaker's sentences in a recording judged as samples for a cloned
+        """A speaker's sentences in a transcription judged as samples for a cloned
         voice, and the ones the server would use (``chosen``). Pass the
         ``start``/``end`` of the ones you want as ``spans`` to
         ``create_from_appearance``. With ``spans``, ``picked`` says whether
@@ -929,7 +878,7 @@ class Speakers(_Group):
         data = await self._t.json(
             "GET",
             "/v1/speakers/from-appearance/samples",
-            query={"transcriptionId": transcription_id, "recordingId": recording_id, "appearance": appearance, "spans": picked},
+            query={"transcriptionId": transcription_id, "appearance": appearance, "spans": picked},
         )
         return _one(m.AppearanceSamples, data)
 
@@ -955,19 +904,19 @@ class Speakers(_Group):
         *,
         lang: Optional[str] = None,
         format: Optional[str] = None,
-        recording: Optional[str] = None,
+        transcription: Optional[str] = None,
         listener_token: Optional[str] = None,
         share_code: Optional[str] = None,
         as_owner: bool = True,
     ) -> bytes:
-        """The speaker's cloned voice speaking ``lang``. With ``recording``, as
-        it speaks in that recording, for whoever may read it (its owner, or a
+        """The speaker's cloned voice speaking ``lang``. With ``transcription``, as
+        it speaks in that transcription, for whoever may read it (its owner, or a
         listener with ``listener_token`` or ``share_code``)."""
         resp = await self._t.raw(
             "GET",
             f"/v1/speakers/{_p(id)}/preview",
             headers={"accept": "*/*"},
-            query={**listener_query(listener_token, share_code), "lang": lang, "format": format, "recording": recording},
+            query={**listener_query(listener_token, share_code), "lang": lang, "format": format, "transcription": transcription},
             anonymous=not as_owner,
         )
         return resp.content
@@ -975,6 +924,50 @@ class Speakers(_Group):
     async def sample(self, id: str) -> bytes:
         resp = await self._t.raw("GET", f"/v1/speakers/{_p(id)}/sample", headers={"accept": "*/*"})
         return resp.content
+
+    async def list_invites(self) -> List[m.SpeakerInvite]:
+        """Invitations still waiting for their person to record, newest first."""
+        return _many(m.SpeakerInvite, await self._t.json("GET", "/v1/speakers/invites"), "invites")
+
+    async def invite(
+        self, name: str, *, email: Optional[str] = None, gender: Optional[str] = None, color: Optional[str] = None
+    ) -> m.SpeakerInvite:
+        """Invite a person by link to record their own voice and agree to have it
+        cloned. ``url`` is the link to send them (emailed too with ``email``);
+        it works once and for 7 days."""
+        body = _body(m.CreateSpeakerInvite, {"name": name, "email": email, "gender": gender, "color": color})
+        return _one(m.SpeakerInvite, await self._t.json("POST", "/v1/speakers/invites", json_body=body))
+
+    async def cancel_invite(self, id: str) -> None:
+        await self._t.json("DELETE", f"/v1/speakers/invites/{_p(id)}")
+
+    async def renew_invite(self, id: str) -> m.SpeakerInvite:
+        """A new link for 7 more days; the old one stops working."""
+        return _one(m.SpeakerInvite, await self._t.json("POST", f"/v1/speakers/invites/{_p(id)}/renew"))
+
+
+class SpeakerInvites(_Group):
+    """``vs.speaker_invites``: what an invited person does with their link, with no credential."""
+
+    async def get(self, token: str) -> m.OpenSpeakerInvite:
+        return _one(m.OpenSpeakerInvite, await self._t.json("GET", f"/v1/speaker-invites/{_p(token)}", anonymous=True))
+
+    async def submit(
+        self, token: str, *, sample: Upload, consent: bool, email: Optional[str] = None, file_name: Optional[str] = None
+    ) -> Dict[str, Any]:
+        """Send the invited person's own recording; ``consent=True`` is their
+        agreement to have their voice cloned. ``email`` gets a link to withdraw it."""
+        meta = _body(m.SubmitSpeakerInvite, {"consent": consent, "email": email})
+        files: Dict[str, Any] = {"meta": (None, json.dumps(meta), "application/json")}
+        files["sample"] = await asyncio.to_thread(_file_part, sample, file_name, "sample.webm")
+        return await self._t.json("POST", f"/v1/speaker-invites/{_p(token)}", files=files, anonymous=True)
+
+    async def withdrawal(self, token: str) -> m.SpeakerConsentWithdrawal:
+        return _one(m.SpeakerConsentWithdrawal, await self._t.json("GET", f"/v1/speaker-invites/withdraw/{_p(token)}", anonymous=True))
+
+    async def withdraw(self, token: str) -> m.SpeakerConsentWithdrawal:
+        """Take back consent: the cloned voice and the voice sample are deleted."""
+        return _one(m.SpeakerConsentWithdrawal, await self._t.json("POST", f"/v1/speaker-invites/withdraw/{_p(token)}", anonymous=True))
 
 
 class Search(_Group):
@@ -986,7 +979,6 @@ class Search(_Group):
         *,
         broadcasts: Optional[List[str]] = None,
         listener_tokens: Optional[List[str]] = None,
-        recording: Optional[str] = None,
         transcription: Optional[str] = None,
         lang: Optional[str] = None,
         limit: Optional[int] = None,
@@ -1008,7 +1000,6 @@ class Search(_Group):
             "q": q,
             "broadcasts": ",".join(broadcasts) if broadcasts else None,
             "listenerTokens": ",".join(listener_tokens) if listener_tokens else None,
-            "recording": recording,
             "transcription": transcription,
             "lang": lang,
             "limit": limit,
@@ -1023,7 +1014,6 @@ class Search(_Group):
         self,
         q: str,
         *,
-        recording: Optional[str] = None,
         transcription: Optional[str] = None,
         site: Optional[str] = None,
         language: Optional[str] = None,
@@ -1040,7 +1030,6 @@ class Search(_Group):
         left this hour (``None`` with no limit)."""
         query = {
             "q": q,
-            "recording": recording,
             "transcription": transcription,
             **_list_filters(
                 site=site, language=language, kind=kind, origin=origin, tag=tag,
@@ -1085,7 +1074,7 @@ class Connect(_Group):
 
 class Billing(_Group):
     """``vs.billing``: the account's plan, credit balance and limits, the
-    price list, the ledger and the per-recording charges."""
+    price list, the ledger and the per-transcription charges."""
 
     async def get(self) -> m.BillingView:
         """The account: plan, rates, balance, limits, subscription, top-up URL."""
@@ -1100,7 +1089,7 @@ class Billing(_Group):
         return _one(m.LedgerPage, await self._t.json("GET", "/v1/billing/ledger", query={"cursor": cursor, "limit": limit}))
 
     async def charges(self, *, cursor: Optional[str] = None, limit: Optional[int] = None) -> m.ChargePage:
-        """The per-recording charges, newest first."""
+        """The per-transcription charges, newest first."""
         return _one(m.ChargePage, await self._t.json("GET", "/v1/billing/charges", query={"cursor": cursor, "limit": limit}))
 
     async def create_checkout(self, *, idempotency_key: Optional[str] = None, **fields: Any) -> m.CheckoutView:

@@ -1,6 +1,6 @@
 """``vs.realtime``: a realtime session is a signed token plus one socket
-(``RealtimeSession``, over the public WS frame protocol; a recording's
-publisher stream is one too).  Nothing is stored: the transcript is what
+(``RealtimeSession``, over the public WS frame protocol; a live
+transcription's publisher stream is one too).  Nothing is stored: the transcript is what
 the socket sends."""
 
 from __future__ import annotations
