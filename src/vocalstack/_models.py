@@ -46,7 +46,9 @@ NotVoicedReason = Literal["rewrite"]
 
 DoneReason = Literal["eof", "max_duration", "cancelled"]
 
-ExportFormat = Literal["json", "srt", "xlsx", "pdf"]
+ExportFormat = Literal["json", "srt", "vtt", "txt", "md", "xlsx", "pdf"]
+
+ExportTimestamps = Literal["off", "paragraph", "line"]
 
 FileUploadState = Literal["uploading", "complete"]
 

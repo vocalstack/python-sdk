@@ -29,7 +29,7 @@ from .errors import VocalStackError
 from .realtime import RealtimeTranscript
 from .realtime import RealtimeSession, pace_realtime
 
-__version__ = "1.0.0a13"
+__version__ = "1.0.0a14"
 
 __all__ = [
     "DEFAULT_BASE_URL",

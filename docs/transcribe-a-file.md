@@ -35,7 +35,7 @@ There are no webhooks. Read `GET /v1/transcriptions/{id}/job` until the state is
 
 ## 4. Export it
 
-`GET /v1/transcriptions/{id}/export` returns a file: `format=srt`, `json`, `xlsx` or `pdf`, with `lang=` for a translated one. In the SDKs, `vs.transcriptions.export` returns the response; read its bytes (PHP's `$vs->transcriptions->export` returns them as a string).
+`GET /v1/transcriptions/{id}/export` returns a file: `format=pdf`, `xlsx`, `srt`, `vtt`, `txt`, `md` or `json`, with `lang=` for a translated one, `speakerLabels=auto|on|off`, `timestamps=paragraph|line|off`, `startS`/`endS` for one part, and `summary=true` to put the summary first. In the SDKs, `vs.transcriptions.export` returns the response; read its bytes (PHP's `$vs->transcriptions->export` returns them as a string).
 
 ## Complete code
 

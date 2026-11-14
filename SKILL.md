@@ -1,6 +1,6 @@
 ---
 name: vocalstack
-description: Use when writing Python code that calls the VocalStack speech API with the vocalstack package, for example to transcribe an audio or video URL or a local file, stream live audio for realtime transcription, fetch or export a transcript (JSON, SRT, XLSX, PDF), or search transcripts. Covers installing, API keys, base URLs, five copy-paste programs and error handling (401, 402, 403, 429).
+description: Use when writing Python code that calls the VocalStack speech API with the vocalstack package, for example to transcribe an audio or video URL or a local file, stream live audio for realtime transcription, fetch or export a transcript (PDF, XLSX, SRT, VTT, text, Markdown, JSON), or search transcripts. Covers installing, API keys, base URLs, five copy-paste programs and error handling (401, 402, 403, 429).
 ---
 
 # VocalStack Python SDK
@@ -110,8 +110,9 @@ asyncio.run(main(sys.argv[1]))
 ## 3. Fetch a transcript or an export file
 
 The transcript holds segments (with word timings), sentences and speakers.
-Export formats are `json`, `srt`, `xlsx` and `pdf`; add `lang="<code>"` for a
-translated file. `export` returns the file's bytes.
+Export formats are `pdf`, `xlsx`, `srt`, `vtt`, `txt`, `md` and `json`; add
+`lang="<code>"` for a translated file, `speaker_labels="off"` (or `"on"`, `"auto"`),
+`timestamps="off"`, `start_s`/`end_s` for one part and `summary=True`. `export` returns the file's bytes.
 
 ```python
 import asyncio, os, sys

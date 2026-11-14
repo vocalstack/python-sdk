@@ -468,12 +468,32 @@ class Transcriptions(_ParentResource):
         return _one(m.SummaryStatus, data)
 
     async def export(
-        self, id: str, format: str, *, lang: Optional[str] = None, share_code: Optional[str] = None, listener_token: Optional[str] = None
+        self,
+        id: str,
+        format: str,
+        *,
+        lang: Optional[str] = None,
+        share_code: Optional[str] = None,
+        listener_token: Optional[str] = None,
+        speaker_labels: Optional[str] = None,
+        timestamps: Optional[str] = None,
+        start_s: Optional[float] = None,
+        end_s: Optional[float] = None,
+        summary: Optional[bool] = None,
     ) -> bytes:
-        """An export file: ``json``, ``srt``, ``xlsx`` or ``pdf``; ``lang`` makes it read in that language. ``listener_token``: a broadcast listener's, once the transcription has ended."""
-        resp = await self._t.raw(
-            "GET", self._path(id, "/export"), headers={"accept": "*/*"}, query={"format": format, "lang": lang, "shareCode": share_code, "listenerToken": listener_token}
-        )
+        """An export file: ``pdf``, ``xlsx``, ``srt``, ``vtt``, ``txt``, ``md`` or ``json``; ``lang`` makes it read in that language. ``speaker_labels``: ``auto``, ``on`` or ``off`` for this file (default: the transcription's own); ``timestamps``: ``paragraph``, ``line`` or ``off``; ``start_s``/``end_s`` keep one window; ``summary`` puts the summary first. ``listener_token``: a broadcast listener's, once the transcription has ended."""
+        query = {
+            "format": format,
+            "lang": lang,
+            "shareCode": share_code,
+            "listenerToken": listener_token,
+            "speakerLabels": speaker_labels,
+            "timestamps": timestamps,
+            "startS": None if start_s is None else str(start_s),
+            "endS": None if end_s is None else str(end_s),
+            "summary": "true" if summary else None,
+        }
+        resp = await self._t.raw("GET", self._path(id, "/export"), headers={"accept": "*/*"}, query=query)
         return resp.content
 
     async def audio(
